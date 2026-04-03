@@ -9,7 +9,8 @@ COPY packages/server/package.json packages/server/
 COPY packages/web/package.json packages/web/
 
 # Install all dependencies (including devDependencies for build)
-RUN npm install
+# Remove lock file to avoid cross-platform optional dependency issues (rollup native modules)
+RUN rm -f package-lock.json && npm install
 
 # Copy source code
 COPY tsconfig.json ./
