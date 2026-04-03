@@ -68,7 +68,7 @@ async function runChatAgent(
   userMessage: string,
   contextStr: string,
   historyStr: string,
-  apiKey: string,
+  _apiKey: string, // ignored — withStreamRetry handles key selection
   onEvent: (event: Record<string, any>) => void
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
@@ -89,51 +89,46 @@ ${agent.systemPrompt}
 - 用對話的口吻，不要像報告
 - 如果有相關資料被提供，引用它`;
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const genai = new GoogleGenerativeAI(apiKey);
-  const geminiModel = genai.getGenerativeModel({
-    model,
-    systemInstruction: chatSystemPrompt,
-    generationConfig: { maxOutputTokens: 300 },
-  });
-
   let prompt = `使用者訊息：${userMessage}`;
-  if (contextStr) {
-    prompt += `\n\n【相關資料】\n${contextStr}`;
-  }
-  if (historyStr) {
-    prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
-  }
+  if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
+  if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  const streamResult = await geminiModel.generateContentStream(prompt);
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   let fullText = "";
 
-  for await (const chunk of streamResult.stream) {
-    const text = chunk.text();
-    if (text) {
-      fullText += text;
-      onEvent({
-        type: "agent-thinking",
-        agentId: agent.id,
-        agentName: agent.name,
-        agentEmoji: agent.emoji,
-        content: text,
-      });
-    }
-  }
+  // Use withStreamRetry for automatic key rotation on 429
+  const { withStreamRetry } = await import("../ai/geminiRetry.js");
+  await withStreamRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genai.getGenerativeModel({
+      model: modelName,
+      systemInstruction: chatSystemPrompt,
+      generationConfig: { maxOutputTokens: 300 },
+    });
 
-  // Track usage
-  const response = await streamResult.response;
-  const usage = response.usageMetadata;
-  if (usage) {
-    trackUsageByKey(
-      apiKey,
-      model,
-      usage.promptTokenCount || 0,
-      usage.candidatesTokenCount || 0,
-      "chat-agent"
-    );
-  }
+    const streamResult = await geminiModel.generateContentStream(prompt);
+    fullText = "";
+
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullText += text;
+        onEvent({
+          type: "agent-thinking",
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmoji: agent.emoji,
+          content: text,
+        });
+      }
+    }
+
+    const response = await streamResult.response;
+    const usage = response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
+    }
+  }, { maxRetries: 3 });
 
   onEvent({
     type: "agent-done",

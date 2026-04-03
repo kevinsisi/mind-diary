@@ -42,7 +42,7 @@ async function runAgent(
   agent: AgentPersona,
   title: string,
   content: string,
-  apiKey: string,
+  _apiKey: string, // ignored — withStreamRetry handles key
   onEvent: OnEvent,
   imageContext?: string
 ): Promise<{ agentId: string; result: string }> {
@@ -55,42 +55,44 @@ async function runAgent(
     message: `${agent.name} 正在分析...`,
   });
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
-  const genai = new GoogleGenerativeAI(apiKey);
-  const geminiModel = genai.getGenerativeModel({
-    model,
-    systemInstruction: agent.systemPrompt,
-    generationConfig: { maxOutputTokens: 512 },
-  });
-
   let prompt = `日記標題：${title}\n\n日記內容：${content}`;
-  if (imageContext) {
-    prompt += `\n\n[附件圖片描述]：${imageContext}`;
-  }
+  if (imageContext) prompt += `\n\n[附件圖片描述]：${imageContext}`;
 
-  const result = await geminiModel.generateContentStream(prompt);
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
   let fullText = '';
 
-  for await (const chunk of result.stream) {
-    const text = chunk.text();
-    if (text) {
-      fullText += text;
-      onEvent({
-        type: 'agent-thinking',
-        agentId: agent.id,
-        agentName: agent.name,
-        agentEmoji: agent.emoji,
-        content: text,
-      });
-    }
-  }
+  const { withStreamRetry } = await import('./geminiRetry.js');
+  await withStreamRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genai.getGenerativeModel({
+      model: modelName,
+      systemInstruction: agent.systemPrompt,
+      generationConfig: { maxOutputTokens: 512 },
+    });
 
-  // Track usage
-  const response = await result.response;
-  const usage = response.usageMetadata;
-  if (usage) {
-    trackUsageByKey(apiKey, model, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-agent');
-  }
+    const result = await geminiModel.generateContentStream(prompt);
+    fullText = '';
+
+    for await (const chunk of result.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullText += text;
+        onEvent({
+          type: 'agent-thinking',
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmoji: agent.emoji,
+          content: text,
+        });
+      }
+    }
+
+    const response = await result.response;
+    const usage = response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-agent');
+    }
+  }, { maxRetries: 3 });
 
   onEvent({
     type: 'agent-done',
