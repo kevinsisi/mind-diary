@@ -3,6 +3,7 @@ import { sqlite } from "../db/connection.js";
 import { AGENTS, MASTER_AGENT_PROMPT, AgentPersona } from "../ai/agents.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
+import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = Router();
@@ -419,7 +420,8 @@ router.post(
         .join("\n");
 
       // 4. Select agents
-      const selectedAgents = selectChatAgents(content, contextStr);
+      sendEvent({ type: "phase", phase: "selecting", message: "正在決定要找誰來聊..." });
+      const selectedAgents = await selectAgentsWithAI(`${content} ${contextStr}`, 3);
 
       sendEvent({
         type: "phase",
