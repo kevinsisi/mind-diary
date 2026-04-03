@@ -1,0 +1,39 @@
+schema: spec-driven
+
+context: |
+  Project: Mind Diary (心靈日記) — personal knowledge base + AI diary service
+  Deployed on Raspberry Pi via Docker, port 8823, URL: vault.sisihome.org
+
+  Tech stack:
+  - Backend: TypeScript, Express, SQLite (better-sqlite3), Drizzle ORM
+  - Frontend: React + Vite + TypeScript
+  - AI: Gemini 2.5 Flash via @google/generative-ai SDK
+  - Key Pool: follows project-bridge architecture (withGeminiRetry, cooldown persistence, error-graded 429/401/403/5xx, Fisher-Yates batch, management REST API)
+  - Search: FTS5 full-text search (Chinese support), Context Stuffing RAG (no vector DB)
+  - Monorepo structure: packages/server + packages/web
+  - Docker Compose deployment on RPi (Manjaro ARM aarch64)
+  - Reverse proxy: Caddy with HTTPS via Cloudflare DNS-01
+  - Language: UI in Traditional Chinese
+
+  Core features:
+  - File upload + AI analysis (PDF, images, text)
+  - RAG chat with cross-file AI memory (Gemini 1M context window)
+  - Private diary with AI reflection
+  - Chinese fuzzy search (FTS5 pre-filter + Gemini)
+  - Gemini API key pool with DB-backed cooldown, auto-retry, batch caller
+
+  Conventions:
+  - Conventional commits
+  - All AI agent code must follow project-bridge key-pool architecture
+  - Permission gating, context management, error isolation, sensitive data filtering
+  - No IPv6, Tailscale networking only
+
+rules:
+  proposal:
+    - Keep proposals concise and focused
+    - Always include a "Non-goals" section
+    - Reference project-bridge patterns where applicable
+  tasks:
+    - Break tasks into chunks of max 2 hours
+    - Group tasks by layer (infra, backend, frontend, AI, integration)
+    - Include key-pool setup as an early task
