@@ -1,0 +1,16 @@
+services:
+  mind-diary:
+    build: .
+    container_name: mind-diary
+    restart: unless-stopped
+    ports:
+      - "8823:8823"
+    environment:
+      - PORT=8823
+      - DATABASE_PATH=/app/data/mind-diary.db
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS}
+    volumes:
+      - mind-diary-data:/app/data
+
+volumes:
+  mind-diary-data:
