@@ -261,14 +261,17 @@ router.post("/:id/analyze", async (req: Request, res: Response) => {
   const entry = sqlite.prepare("SELECT * FROM diary_entries WHERE id = ?").get(id) as any;
   if (!entry) return res.status(404).json({ error: "日記不存在" });
 
-  // SSE headers
+  // SSE headers — disable all buffering
   res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
 
+  const flush = () => { try { (res as any).flush?.(); } catch {} };
+
   // Heartbeat
-  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+  const heartbeat = setInterval(() => { res.write(': heartbeat\n\n'); flush(); }, 15000);
 
   try {
     const { analyzeDiary } = await import('../ai/diaryAnalyzer.js');
@@ -278,6 +281,7 @@ router.post("/:id/analyze", async (req: Request, res: Response) => {
       entry.content,
       (event) => {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
+        flush();
       }
     );
 
