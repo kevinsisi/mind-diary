@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
-import { generateReflection, generateAutoTags } from "../ai/geminiClient.js";
+import { generateReflection } from "../ai/geminiClient.js";
 
 const router = Router();
 
@@ -61,33 +61,11 @@ router.post("/", async (req: Request, res: Response) => {
       )
       .run(entryId, title, content);
 
-    // Auto-trigger AI reflection (graceful failure)
-    let aiReflection: string | null = null;
-    try {
-      aiReflection = await generateReflection(content);
-      sqlite
-        .prepare("UPDATE diary_entries SET ai_reflection = ? WHERE id = ?")
-        .run(aiReflection, entryId);
-    } catch (err) {
-      console.error("[diary] AI reflection failed:", err);
-    }
-
-    // Auto-generate tags (graceful failure)
-    let tags: string[] = [];
-    try {
-      tags = await generateAutoTags(content, title);
-      if (tags.length > 0) {
-        upsertTagsForEntry(entryId, tags);
-      }
-    } catch (err) {
-      console.error("[diary] AI auto-tag failed:", err);
-    }
-
     const entry = sqlite
       .prepare("SELECT * FROM diary_entries WHERE id = ?")
-      .get(entryId);
+      .get(entryId) as any;
 
-    res.status(201).json({ ...entry as any, tags });
+    res.status(201).json({ ...entry, tags: [], ai_agents: null });
   } catch (err: any) {
     console.error("[diary] Create error:", err);
     res.status(500).json({ error: err.message || "建立失敗" });
@@ -104,7 +82,7 @@ router.get("/", (req: Request, res: Response) => {
     const tagFilter = req.query.tag as string | undefined;
 
     let countSql = "SELECT COUNT(DISTINCT d.id) as count FROM diary_entries d";
-    let querySql = "SELECT DISTINCT d.id, d.title, d.content, d.mood, d.ai_reflection, d.folder_id, d.created_at, d.updated_at FROM diary_entries d";
+    let querySql = "SELECT DISTINCT d.id, d.title, d.content, d.mood, d.ai_reflection, d.ai_agents, d.folder_id, d.created_at, d.updated_at FROM diary_entries d";
     const joins: string[] = [];
     const conditions: string[] = [];
     const params: any[] = [];
@@ -131,10 +109,11 @@ router.get("/", (req: Request, res: Response) => {
       .prepare(querySql + joinStr + whereStr + " ORDER BY d.created_at DESC LIMIT ? OFFSET ?")
       .all(...params, limit, offset) as any[];
 
-    // Attach tags to each entry
+    // Attach tags to each entry, parse ai_agents JSON
     const entriesWithTags = entries.map(e => ({
       ...e,
       tags: getEntryTags(e.id),
+      ai_agents: e.ai_agents ? JSON.parse(e.ai_agents) : null,
     }));
 
     res.json({
@@ -163,7 +142,11 @@ router.get("/:id", (req: Request, res: Response) => {
       return res.status(404).json({ error: "日記不存在" });
     }
 
-    res.json({ ...entry, tags: getEntryTags(entry.id) });
+    res.json({
+      ...entry,
+      tags: getEntryTags(entry.id),
+      ai_agents: entry.ai_agents ? JSON.parse(entry.ai_agents) : null,
+    });
   } catch (err: any) {
     console.error("[diary] Get error:", err);
     res.status(500).json({ error: err.message || "查詢失敗" });
@@ -269,6 +252,64 @@ router.post("/:id/reflect", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[diary] Reflect error:", err);
     res.status(500).json({ error: err.message || "AI 反思生成失敗" });
+  }
+});
+
+// POST /api/diary/:id/analyze — run multi-agent analysis with SSE streaming
+router.post("/:id/analyze", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const entry = sqlite.prepare("SELECT * FROM diary_entries WHERE id = ?").get(id) as any;
+  if (!entry) return res.status(404).json({ error: "日記不存在" });
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Heartbeat
+  const heartbeat = setInterval(() => res.write(': heartbeat\n\n'), 15000);
+
+  try {
+    const { analyzeDiary } = await import('../ai/diaryAnalyzer.js');
+
+    const result = await analyzeDiary(
+      entry.title,
+      entry.content,
+      (event) => {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      }
+    );
+
+    // Save reflection to DB
+    sqlite.prepare("UPDATE diary_entries SET ai_reflection = ? WHERE id = ?")
+      .run(result.reflection, id);
+
+    // Save agent results as JSON
+    try {
+      sqlite.prepare("UPDATE diary_entries SET ai_agents = ? WHERE id = ?")
+        .run(JSON.stringify(result.agentResults), id);
+    } catch { /* column may not exist yet */ }
+
+    // Save tags
+    // Clear old tags
+    sqlite.prepare("DELETE FROM diary_entry_tags WHERE diary_id = ?").run(id);
+
+    for (const tagName of result.tags) {
+      sqlite.prepare("INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)").run(tagName, tagColor(tagName));
+      const tag = sqlite.prepare("SELECT id FROM tags WHERE name = ?").get(tagName) as any;
+      if (tag) {
+        sqlite.prepare("INSERT OR IGNORE INTO diary_entry_tags (diary_id, tag_id) VALUES (?, ?)").run(id, tag.id);
+      }
+    }
+
+    // Final done event with saved data
+    res.write(`data: ${JSON.stringify({ type: 'complete', id, reflection: result.reflection, tags: result.tags, agentResults: result.agentResults })}\n\n`);
+  } catch (err: any) {
+    res.write(`data: ${JSON.stringify({ type: 'error', message: err.message || '分析失敗' })}\n\n`);
+  } finally {
+    clearInterval(heartbeat);
+    res.end();
   }
 });
 

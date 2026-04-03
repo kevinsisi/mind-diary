@@ -123,5 +123,9 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE diary_entries ADD COLUMN folder_id INTEGER REFERENCES folders(id)");
   }
 
+  if (!columns.some((c: any) => c.name === 'ai_agents')) {
+    db.exec("ALTER TABLE diary_entries ADD COLUMN ai_agents TEXT");
+  }
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

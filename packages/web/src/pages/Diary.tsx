@@ -16,16 +16,40 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────
 
+interface AgentResult {
+  agentId: string;
+  name: string;
+  emoji: string;
+  role: string;
+  result: string;
+}
+
 interface DiaryEntry {
   id: number;
   title: string;
   content: string;
   mood: string | null;
   ai_reflection: string | null;
+  ai_agents: AgentResult[] | null;
   tags: string[];
   folder_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+interface AnalysisEvent {
+  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'done' | 'error' | 'tags' | 'complete';
+  phase?: string;
+  message?: string;
+  agentId?: string;
+  agentName?: string;
+  agentEmoji?: string;
+  agentRole?: string;
+  content?: string;
+  tags?: string[];
+  reflection?: string;
+  agents?: Array<{ id: string; name: string; emoji: string; role: string }>;
+  agentResults?: AgentResult[];
 }
 
 interface FolderItem {
@@ -131,7 +155,14 @@ export default function Diary() {
   // Loading
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [reflecting, setReflecting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // Analysis streaming state
+  const [analysisPhase, setAnalysisPhase] = useState('');
+  const [activeAgents, setActiveAgents] = useState<Array<{ id: string; name: string; emoji: string; role: string }>>([]);
+  const [agentThinking, setAgentThinking] = useState<Record<string, { name: string; emoji: string; role: string; text: string; done: boolean }>>({});
+  const [synthesisText, setSynthesisText] = useState('');
+  const [showThinking, setShowThinking] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -233,6 +264,8 @@ export default function Diary() {
         const created = await apiClient.post<DiaryEntry>('/api/diary', body);
         setSelectedEntry(created);
         setEntries((prev) => [created, ...prev]);
+        // Auto-trigger multi-agent analysis
+        setTimeout(() => handleAnalyze(created), 100);
       } else if (selectedEntry) {
         const body: Record<string, unknown> = {
           title: editTitle.trim(),
@@ -269,20 +302,84 @@ export default function Diary() {
     }
   }
 
-  async function handleReflect() {
-    if (!selectedEntry) return;
-    setReflecting(true);
+  async function handleAnalyze(entry?: DiaryEntry) {
+    const target = entry || selectedEntry;
+    if (!target) return;
+    setAnalyzing(true);
+    setShowThinking(true);
+    setAnalysisPhase('');
+    setActiveAgents([]);
+    setAgentThinking({});
+    setSynthesisText('');
+
     try {
-      const res = await apiClient.post<{ ai_reflection: string }>(
-        `/api/diary/${selectedEntry.id}/reflect`,
-      );
-      const updated = { ...selectedEntry, ai_reflection: res.ai_reflection };
-      setSelectedEntry(updated);
-      setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+      const response = await fetch(`/api/diary/${target.id}/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No stream');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event: AnalysisEvent = JSON.parse(line.slice(6));
+
+            if (event.type === 'phase' && event.agents) {
+              setActiveAgents(event.agents);
+              setAnalysisPhase(event.message || '');
+            } else if (event.type === 'phase') {
+              setAnalysisPhase(event.message || '');
+            } else if (event.type === 'agent-start' && event.agentId) {
+              setAgentThinking(prev => ({
+                ...prev,
+                [event.agentId!]: { name: event.agentName || '', emoji: event.agentEmoji || '', role: event.agentRole || '', text: '', done: false },
+              }));
+            } else if (event.type === 'agent-thinking' && event.agentId) {
+              setAgentThinking(prev => ({
+                ...prev,
+                [event.agentId!]: {
+                  ...prev[event.agentId!],
+                  text: (prev[event.agentId!]?.text || '') + (event.content || ''),
+                },
+              }));
+            } else if (event.type === 'agent-done' && event.agentId) {
+              setAgentThinking(prev => ({
+                ...prev,
+                [event.agentId!]: { ...prev[event.agentId!], done: true },
+              }));
+            } else if (event.type === 'synthesizing' && event.content) {
+              setSynthesisText(prev => prev + event.content);
+            } else if (event.type === 'complete') {
+              const updated: DiaryEntry = {
+                ...target,
+                ai_reflection: event.reflection || null,
+                ai_agents: event.agentResults || null,
+                tags: event.tags || target.tags,
+              };
+              setSelectedEntry(updated);
+              setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+              fetchTags();
+            }
+          } catch { /* skip malformed */ }
+        }
+      }
     } catch {
       // silent
     } finally {
-      setReflecting(false);
+      setAnalyzing(false);
     }
   }
 
@@ -776,39 +873,128 @@ export default function Diary() {
                 {selectedEntry.content}
               </div>
 
-              {/* AI Reflection */}
-              <div className="mt-6 rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
-                <div className="flex items-center justify-between mb-2">
+              {/* AI Analysis Section */}
+              <div className="mt-6 space-y-3">
+                {/* Header + button */}
+                <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700">
                     <Sparkles size={16} />
-                    AI 心靈回饋
+                    AI 好友分析
                   </div>
                   <button
-                    onClick={handleReflect}
-                    disabled={reflecting}
+                    onClick={() => handleAnalyze()}
+                    disabled={analyzing}
                     className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50"
                   >
-                    {reflecting ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={12} />
-                    )}
-                    {selectedEntry.ai_reflection ? '重新生成' : '生成回饋'}
+                    {analyzing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                    {selectedEntry.ai_reflection ? '重新分析' : '開始分析'}
                   </button>
                 </div>
-                {reflecting ? (
-                  <div className="flex items-center gap-2 text-sm text-indigo-400">
-                    <Loader2 size={14} className="animate-spin" />
-                    AI 正在思考中...
+
+                {/* Thinking Process (visible during & after analysis) */}
+                {(analyzing || showThinking) && Object.keys(agentThinking).length > 0 && (
+                  <div className="space-y-2">
+                    {analysisPhase && (
+                      <div className="text-xs text-indigo-500 font-medium">{analysisPhase}</div>
+                    )}
+                    {Object.entries(agentThinking).map(([id, agent]) => (
+                      <div key={id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <span>{agent.emoji}</span>
+                          <span className="text-sm font-medium text-gray-900">{agent.name}</span>
+                          <span className="text-xs text-gray-400">{agent.role}</span>
+                          {!agent.done && analyzing && <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />}
+                          {agent.done && <span className="text-xs text-green-500 ml-auto">✓</span>}
+                        </div>
+                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto">
+                          {agent.text || <span className="text-gray-300 italic">思考中...</span>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Synthesis streaming */}
+                    {synthesisText && (
+                      <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-indigo-100/50 border-b border-indigo-200">
+                          <span>🧠</span>
+                          <span className="text-sm font-medium text-indigo-900">整合者</span>
+                          <span className="text-xs text-indigo-400">彙整觀點</span>
+                          {analyzing && <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />}
+                        </div>
+                        <div className="px-3 py-2 text-xs text-indigo-800 leading-relaxed whitespace-pre-line">
+                          {synthesisText}
+                        </div>
+                      </div>
+                    )}
+
+                    {!analyzing && showThinking && (
+                      <button
+                        onClick={() => setShowThinking(false)}
+                        className="text-xs text-gray-400 hover:text-gray-600"
+                      >
+                        收起思考過程
+                      </button>
+                    )}
                   </div>
-                ) : selectedEntry.ai_reflection ? (
-                  <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
-                    {selectedEntry.ai_reflection}
-                  </p>
-                ) : (
-                  <p className="text-sm text-indigo-400 italic">
-                    點擊「生成回饋」讓 AI 給你心靈上的回應
-                  </p>
+                )}
+
+                {/* Final Reflection (always shown if available) */}
+                {!analyzing && selectedEntry.ai_reflection && !showThinking && (
+                  <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
+                    <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
+                      {selectedEntry.ai_reflection}
+                    </p>
+                    {/* Collapsed agent results */}
+                    {selectedEntry.ai_agents && selectedEntry.ai_agents.length > 0 && (
+                      <button
+                        onClick={() => setShowThinking(true)}
+                        className="mt-2 text-xs text-indigo-400 hover:text-indigo-600"
+                      >
+                        查看 {selectedEntry.ai_agents.length} 位好友的分析過程
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Show saved agent results when expanding */}
+                {!analyzing && showThinking && selectedEntry.ai_agents && selectedEntry.ai_agents.length > 0 && Object.keys(agentThinking).length === 0 && (
+                  <div className="space-y-2">
+                    {selectedEntry.ai_agents.map(agent => (
+                      <div key={agent.agentId} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                          <span>{agent.emoji}</span>
+                          <span className="text-sm font-medium text-gray-900">{agent.name}</span>
+                          <span className="text-xs text-gray-400">{agent.role}</span>
+                          <span className="text-xs text-green-500 ml-auto">✓</span>
+                        </div>
+                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line">
+                          {agent.result}
+                        </div>
+                      </div>
+                    ))}
+                    {selectedEntry.ai_reflection && (
+                      <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 mb-1">
+                          🧠 整合回饋
+                        </div>
+                        <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
+                          {selectedEntry.ai_reflection}
+                        </p>
+                      </div>
+                    )}
+                    <button onClick={() => setShowThinking(false)} className="text-xs text-gray-400 hover:text-gray-600">
+                      收起思考過程
+                    </button>
+                  </div>
+                )}
+
+                {/* Empty state */}
+                {!analyzing && !selectedEntry.ai_reflection && !showThinking && (
+                  <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
+                    <p className="text-sm text-indigo-400 italic">
+                      點擊「開始分析」讓 AI 好友團隊給你多角度的回饋
+                    </p>
+                  </div>
                 )}
               </div>
             </div>
@@ -879,37 +1065,31 @@ export default function Diary() {
               {selectedEntry.content}
             </div>
 
+            {/* Mobile AI Section */}
             <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700">
                   <Sparkles size={16} />
-                  AI 心靈回饋
+                  AI 好友分析
                 </div>
                 <button
-                  onClick={handleReflect}
-                  disabled={reflecting}
+                  onClick={() => handleAnalyze()}
+                  disabled={analyzing}
                   className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50"
                 >
-                  {reflecting ? (
-                    <Loader2 size={12} className="animate-spin" />
-                  ) : (
-                    <RefreshCw size={12} />
-                  )}
-                  {selectedEntry.ai_reflection ? '重新生成' : '生成回饋'}
+                  {analyzing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {selectedEntry.ai_reflection ? '重新分析' : '開始分析'}
                 </button>
               </div>
-              {reflecting ? (
-                <div className="flex items-center gap-2 text-sm text-indigo-400">
-                  <Loader2 size={14} className="animate-spin" />
-                  AI 正在思考中...
-                </div>
+              {analyzing ? (
+                <div className="text-xs text-indigo-500">{analysisPhase || '分析中...'}</div>
               ) : selectedEntry.ai_reflection ? (
                 <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
                   {selectedEntry.ai_reflection}
                 </p>
               ) : (
                 <p className="text-sm text-indigo-400 italic">
-                  點擊「生成回饋」讓 AI 給你心靈上的回應
+                  點擊「開始分析」讓 AI 好友團隊給你回饋
                 </p>
               )}
             </div>
