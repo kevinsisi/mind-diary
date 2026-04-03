@@ -20,46 +20,8 @@ export interface AnalysisEvent {
 export type OnEvent = (event: AnalysisEvent) => void;
 
 // Determine which agents should analyze this entry
-// AI-based agent selection — let Gemini decide who should respond
-export async function selectAgentsWithAI(text: string, maxAgents: number = 4): Promise<AgentPersona[]> {
-  const agentList = Object.values(AGENTS).map(a => `${a.id}: ${a.name}（${a.role}）— ${a.description}`).join('\n');
-
-  try {
-    const result = await withGeminiRetry(async (apiKey) => {
-      const genai = new GoogleGenerativeAI(apiKey);
-      const model = genai.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20',
-        generationConfig: { maxOutputTokens: 100 },
-      });
-      const prompt = `你是一個調度員。根據使用者的訊息，決定要派哪些 AI 好友來回應。
-
-可用的好友：
-${agentList}
-
-使用者訊息：「${text.slice(0, 500)}」
-
-規則：
-- 選 2-${maxAgents} 位最相關的好友
-- 只回傳 id，用逗號分隔（例如：xiaoyu,dran,xinxin）
-- 一定要選最相關的，不要亂選`;
-
-      const res = await model.generateContent(prompt);
-      return res.response.text().trim();
-    });
-
-    const ids = result.split(/[,，\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-    const selected = ids.map(id => Object.values(AGENTS).find(a => a.id === id)).filter((a): a is AgentPersona => !!a);
-
-    if (selected.length >= 2) return selected.slice(0, maxAgents);
-  } catch (err) {
-    console.warn('[selectAgents] AI selection failed, falling back to keywords:', err);
-  }
-
-  // Fallback: keyword matching
-  return selectAgentsByKeyword(text, maxAgents);
-}
-
-function selectAgentsByKeyword(text: string, maxAgents: number): AgentPersona[] {
+// Instant keyword-based agent selection (no API call, zero latency)
+export function selectAgents(text: string, maxAgents: number = 4): AgentPersona[] {
   const lower = text.toLowerCase();
   const scored = Object.values(AGENTS).map(agent => {
     const score = agent.topics.reduce((sum, topic) => sum + (lower.includes(topic) ? 1 : 0), 0);
@@ -93,7 +55,7 @@ async function runAgent(
     message: `${agent.name} 正在分析...`,
   });
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
     model,
@@ -158,7 +120,7 @@ async function synthesize(
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction: MASTER_AGENT_PROMPT,
       generationConfig: { maxOutputTokens: 1024 },
     });
@@ -178,7 +140,7 @@ async function synthesize(
     const response = await streamResult.response;
     const usage = response.usageMetadata;
     if (usage) {
-      trackUsageByKey(apiKey, process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-master');
+      trackUsageByKey(apiKey, process.env.GEMINI_MODEL || 'gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-master');
     }
 
     return fullText;
@@ -192,7 +154,7 @@ async function generateTags(title: string, content: string): Promise<string[]> {
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash-preview-05-20',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction: '你是標籤生成助手。根據日記標題和內容，生成 2-5 個簡短的繁體中文標籤。每個標籤 1-4 個字。只回傳標籤，用逗號分隔。不加井號。',
       generationConfig: { maxOutputTokens: 100 },
     });
@@ -210,9 +172,9 @@ export async function analyzeDiary(
   onEvent: OnEvent,
   imageContext?: string
 ): Promise<{ reflection: string; tags: string[]; agentResults: Array<{ agentId: string; name: string; emoji: string; role: string; result: string }> }> {
-  // Phase 1: Select agents (AI-based)
-  onEvent({ type: 'phase', phase: 'analyzing', message: '正在分析日記內容，決定要派誰出場...' });
-  const selectedAgents = await selectAgentsWithAI(`${title} ${content}`, 4);
+  // Phase 1: Select agents (instant keyword matching)
+  onEvent({ type: 'phase', phase: 'analyzing', message: '正在分析日記內容...' });
+  const selectedAgents = selectAgents(`${title} ${content}`, 4);
 
   onEvent({
     type: 'phase',

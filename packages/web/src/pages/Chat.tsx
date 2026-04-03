@@ -10,15 +10,27 @@ import {
   PanelLeftClose,
   ChevronDown,
   ChevronRight,
+  FolderPlus,
+  Folder,
+  FolderInput,
+  X,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
+
+interface ChatFolder {
+  id: number;
+  name: string;
+  icon: string;
+  sort_order: number;
+}
 
 interface Session {
   id: number;
   title: string;
   created_at: string;
   lastMessage?: string;
+  folder_id: number | null;
 }
 
 interface Message {
@@ -155,6 +167,111 @@ function ThinkingCard({
   );
 }
 
+// ── SessionItem Component ────────────────────────────────────────
+
+function SessionItem({
+  session,
+  isActive,
+  isMoving,
+  folders,
+  indented,
+  onSelect,
+  onDelete,
+  onMoveStart,
+  onMoveEnd,
+  onMoveTo,
+  formatTime,
+}: {
+  session: Session;
+  isActive: boolean;
+  isMoving: boolean;
+  folders: ChatFolder[];
+  indented: boolean;
+  onSelect: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onMoveStart: () => void;
+  onMoveEnd: () => void;
+  onMoveTo: (folderId: number | null) => void;
+  formatTime: (dateStr: string) => string;
+}) {
+  return (
+    <div className={`relative ${indented ? 'ml-4' : ''}`}>
+      <button
+        onClick={onSelect}
+        className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors group flex items-center justify-between gap-1.5 ${
+          isActive
+            ? 'bg-indigo-100 text-indigo-800'
+            : 'text-gray-700 hover:bg-gray-100'
+        }`}
+      >
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate text-xs">
+            {session.title || '新對話'}
+          </div>
+          {session.lastMessage && (
+            <div className="text-[10px] text-gray-400 truncate mt-0.5">
+              {session.lastMessage}
+            </div>
+          )}
+          <div className="text-[10px] text-gray-400 mt-0.5">
+            {formatTime(session.created_at)}
+          </div>
+        </div>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          {folders.length > 0 && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveStart(); }}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-indigo-100 text-gray-400 hover:text-indigo-600 transition-all"
+              title="移至資料夾"
+            >
+              <FolderInput size={13} />
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+            title="刪除對話"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </button>
+
+      {/* Move-to-folder dropdown */}
+      {isMoving && (
+        <div data-move-dropdown className="absolute right-0 top-full z-20 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 text-xs">
+          <div className="px-3 py-1 text-gray-400 font-medium">移至...</div>
+          {session.folder_id !== null && (
+            <button
+              onClick={() => onMoveTo(null)}
+              className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-600"
+            >
+              未分類
+            </button>
+          )}
+          {folders
+            .filter((f) => f.id !== session.folder_id)
+            .map((f) => (
+              <button
+                key={f.id}
+                onClick={() => onMoveTo(f.id)}
+                className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-600 truncate"
+              >
+                {f.icon ? `${f.icon} ` : ''}{f.name}
+              </button>
+            ))}
+          <button
+            onClick={onMoveEnd}
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-400 border-t border-gray-100 mt-1"
+          >
+            取消
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────
 
 export default function Chat() {
@@ -166,6 +283,13 @@ export default function Chat() {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  // Folder state
+  const [folders, setFolders] = useState<ChatFolder[]>([]);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set());
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [movingSessionId, setMovingSessionId] = useState<number | null>(null);
+
   // Thinking state for current streaming message
   const [currentThinking, setCurrentThinking] = useState<ThinkingData | null>(null);
   // Stored thinking data keyed by the assistant message id that follows it
@@ -173,6 +297,19 @@ export default function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Close move dropdown on outside click
+  useEffect(() => {
+    if (movingSessionId === null) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-move-dropdown]')) {
+        setMovingSessionId(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [movingSessionId]);
 
   // ── Load sessions ───────────────────────────────────────────────
 
@@ -188,9 +325,24 @@ export default function Chat() {
     }
   }, []);
 
+  // ── Load folders ─────────────────────────────────────────────────
+
+  const loadFolders = useCallback(async () => {
+    try {
+      const data = await apiClient.get<ChatFolder[] | { folders: ChatFolder[] }>(
+        '/api/chat/folders',
+      );
+      const list = Array.isArray(data) ? data : data?.folders || [];
+      setFolders(list.sort((a, b) => a.sort_order - b.sort_order));
+    } catch (err) {
+      console.error('Failed to load folders:', err);
+    }
+  }, []);
+
   useEffect(() => {
     loadSessions();
-  }, [loadSessions]);
+    loadFolders();
+  }, [loadSessions, loadFolders]);
 
   // ── Load messages for active session ────────────────────────────
 
@@ -257,6 +409,71 @@ export default function Chat() {
       console.error('Failed to delete session:', err);
     }
   };
+
+  // ── Folder management ────────────────────────────────────────────
+
+  const createFolder = async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    try {
+      const folder = await apiClient.post<ChatFolder>('/api/chat/folders', { name });
+      setFolders((prev) => [...prev, folder]);
+      setNewFolderName('');
+      setShowNewFolder(false);
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+    }
+  };
+
+  const deleteFolder = async (folderId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm('確定要刪除這個資料夾嗎？裡面的對話會移到「未分類」。')) return;
+    try {
+      await apiClient.delete(`/api/chat/folders/${folderId}`);
+      setFolders((prev) => prev.filter((f) => f.id !== folderId));
+      // Move sessions from deleted folder to uncategorized
+      setSessions((prev) =>
+        prev.map((s) => (s.folder_id === folderId ? { ...s, folder_id: null } : s)),
+      );
+    } catch (err) {
+      console.error('Failed to delete folder:', err);
+    }
+  };
+
+  const moveSessionToFolder = async (sessionId: number, folderId: number | null) => {
+    try {
+      await apiClient.put(`/api/chat/sessions/${sessionId}`, { folder_id: folderId });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, folder_id: folderId } : s)),
+      );
+    } catch (err) {
+      console.error('Failed to move session:', err);
+    } finally {
+      setMovingSessionId(null);
+    }
+  };
+
+  const toggleFolder = (folderId: number) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderId)) next.delete(folderId);
+      else next.add(folderId);
+      return next;
+    });
+  };
+
+  // ── Group sessions by folder ────────────────────────────────────
+
+  const sessionsByFolder = (() => {
+    const map: Record<string, Session[]> = { uncategorized: [] };
+    for (const f of folders) map[f.id] = [];
+    for (const s of sessions) {
+      const key = s.folder_id && map[s.folder_id] ? String(s.folder_id) : 'uncategorized';
+      map[key] = map[key] || [];
+      map[key].push(s);
+    }
+    return map;
+  })();
 
   // ── Send message (SSE streaming) ────────────────────────────────
 
@@ -506,45 +723,114 @@ export default function Chat() {
             </button>
           </div>
 
-          {/* Session list */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {sessions.length === 0 && (
+          {/* New folder button / input */}
+          <div className="px-3 pt-2">
+            {showNewFolder ? (
+              <div className="flex items-center gap-1.5">
+                <input
+                  autoFocus
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') createFolder();
+                    if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
+                  }}
+                  placeholder="資料夾名稱"
+                  className="flex-1 min-w-0 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                />
+                <button onClick={createFolder} className="p-1 text-indigo-600 hover:text-indigo-800" title="確認"><Plus size={14} /></button>
+                <button onClick={() => { setShowNewFolder(false); setNewFolderName(''); }} className="p-1 text-gray-400 hover:text-gray-600" title="取消"><X size={14} /></button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowNewFolder(true)}
+                className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+              >
+                <FolderPlus size={13} />
+                新增資料夾
+              </button>
+            )}
+          </div>
+
+          {/* Session list grouped by folder */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+            {sessions.length === 0 && folders.length === 0 && (
               <p className="text-center text-sm text-gray-400 mt-8">
                 尚無對話紀錄
               </p>
             )}
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                onClick={() => setActiveSessionId(session.id)}
-                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors group flex items-center justify-between gap-2 ${
-                  activeSessionId === session.id
-                    ? 'bg-indigo-100 text-indigo-800'
-                    : 'text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="font-medium truncate">
-                    {session.title || '新對話'}
-                  </div>
-                  {session.lastMessage && (
-                    <div className="text-xs text-gray-400 truncate mt-0.5">
-                      {session.lastMessage}
-                    </div>
-                  )}
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {formatTime(session.created_at)}
-                  </div>
+
+            {/* Folders */}
+            {folders.map((folder) => {
+              const folderSessions = sessionsByFolder[folder.id] || [];
+              const isCollapsed = collapsedFolders.has(folder.id);
+              return (
+                <div key={folder.id}>
+                  {/* Folder header */}
+                  <button
+                    onClick={() => toggleFolder(folder.id)}
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors group"
+                  >
+                    {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                    <Folder size={14} className="text-indigo-400" />
+                    <span className="truncate flex-1 text-left">{folder.icon ? `${folder.icon} ` : ''}{folder.name}</span>
+                    <span className="text-[10px] text-gray-400 mr-1">{folderSessions.length}</span>
+                    <button
+                      onClick={(e) => deleteFolder(folder.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all"
+                      title="刪除資料夾"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </button>
+
+                  {/* Sessions inside folder */}
+                  {!isCollapsed && folderSessions.map((session) => (
+                    <SessionItem
+                      key={session.id}
+                      session={session}
+                      isActive={activeSessionId === session.id}
+                      isMoving={movingSessionId === session.id}
+                      folders={folders}
+                      indented
+                      onSelect={() => setActiveSessionId(session.id)}
+                      onDelete={(e) => deleteSession(session.id, e)}
+                      onMoveStart={() => setMovingSessionId(session.id)}
+                      onMoveEnd={() => setMovingSessionId(null)}
+                      onMoveTo={(fid) => moveSessionToFolder(session.id, fid)}
+                      formatTime={formatTime}
+                    />
+                  ))}
                 </div>
-                <button
-                  onClick={(e) => deleteSession(session.id, e)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition-all flex-shrink-0"
-                  title="刪除對話"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </button>
-            ))}
+              );
+            })}
+
+            {/* Uncategorized section */}
+            {sessionsByFolder.uncategorized.length > 0 && (
+              <div>
+                {folders.length > 0 && (
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                    未分類
+                  </div>
+                )}
+                {sessionsByFolder.uncategorized.map((session) => (
+                  <SessionItem
+                    key={session.id}
+                    session={session}
+                    isActive={activeSessionId === session.id}
+                    isMoving={movingSessionId === session.id}
+                    folders={folders}
+                    indented={false}
+                    onSelect={() => setActiveSessionId(session.id)}
+                    onDelete={(e) => deleteSession(session.id, e)}
+                    onMoveStart={() => setMovingSessionId(session.id)}
+                    onMoveEnd={() => setMovingSessionId(null)}
+                    onMoveTo={(fid) => moveSessionToFolder(session.id, fid)}
+                    formatTime={formatTime}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

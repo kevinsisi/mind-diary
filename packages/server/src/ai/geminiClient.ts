@@ -3,7 +3,7 @@ import { withGeminiRetry } from "./geminiRetry.js";
 import { trackUsageByKey } from "./keyPool.js";
 
 // ── Config ────────────────────────────────────────────────────────────
-const DEFAULT_MODEL = "gemini-2.5-flash-preview-05-20";
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 function getModel(): string {
   return process.env.GEMINI_MODEL || DEFAULT_MODEL;

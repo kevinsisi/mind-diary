@@ -127,5 +127,22 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE diary_entries ADD COLUMN ai_agents TEXT");
   }
 
+  // Add folder_id to chat_sessions if it doesn't exist
+  const chatCols = db.prepare("PRAGMA table_info(chat_sessions)").all() as any[];
+  if (!chatCols.some((c: any) => c.name === 'folder_id')) {
+    db.exec("ALTER TABLE chat_sessions ADD COLUMN folder_id INTEGER REFERENCES folders(id)");
+  }
+
+  // Create chat_folders table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS chat_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      icon TEXT DEFAULT '💬',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

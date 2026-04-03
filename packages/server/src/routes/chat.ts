@@ -3,7 +3,7 @@ import { sqlite } from "../db/connection.js";
 import { AGENTS, MASTER_AGENT_PROMPT, AgentPersona } from "../ai/agents.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
-import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
+import { selectAgents } from "../ai/diaryAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = Router();
@@ -89,7 +89,7 @@ ${agent.systemPrompt}
 - 用對話的口吻，不要像報告
 - 如果有相關資料被提供，引用它`;
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
     model,
@@ -178,7 +178,7 @@ async function synthesizeChat(
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       systemInstruction: MASTER_CHAT_PROMPT,
       generationConfig: { maxOutputTokens: 1024 },
     });
@@ -207,7 +207,7 @@ async function synthesizeChat(
     if (usage) {
       trackUsageByKey(
         apiKey,
-        process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20",
+        process.env.GEMINI_MODEL || "gemini-2.5-flash",
         usage.promptTokenCount || 0,
         usage.candidatesTokenCount || 0,
         "chat-master"
@@ -220,15 +220,66 @@ async function synthesizeChat(
   return result;
 }
 
-// ── Sessions CRUD (unchanged) ────────────────────────────────────────
+// ── Chat Folders CRUD ────────────────────────────────────────────────
+
+// GET /api/chat/folders
+router.get("/folders", (_req: Request, res: Response) => {
+  try {
+    const folders = sqlite.prepare("SELECT * FROM chat_folders ORDER BY sort_order ASC, created_at ASC").all();
+    res.json({ folders });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "查詢失敗" });
+  }
+});
+
+// POST /api/chat/folders
+router.post("/folders", (req: Request, res: Response) => {
+  try {
+    const { name, icon } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "名稱不能為空" });
+    const result = sqlite.prepare("INSERT INTO chat_folders (name, icon) VALUES (?, ?)").run(name.trim(), icon || '💬');
+    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ?").get(result.lastInsertRowid);
+    res.status(201).json(folder);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "建立失敗" });
+  }
+});
+
+// PUT /api/chat/folders/:id
+router.put("/folders/:id", (req: Request, res: Response) => {
+  try {
+    const { name, icon } = req.body;
+    const id = Number(req.params.id);
+    sqlite.prepare("UPDATE chat_folders SET name = COALESCE(?, name), icon = COALESCE(?, icon) WHERE id = ?").run(name || null, icon || null, id);
+    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ?").get(id);
+    res.json(folder);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "更新失敗" });
+  }
+});
+
+// DELETE /api/chat/folders/:id
+router.delete("/folders/:id", (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    sqlite.prepare("UPDATE chat_sessions SET folder_id = NULL WHERE folder_id = ?").run(id);
+    sqlite.prepare("DELETE FROM chat_folders WHERE id = ?").run(id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "刪除失敗" });
+  }
+});
+
+// ── Sessions CRUD ────────────────────────────────────────────────────
 
 // POST /api/chat/sessions — create new session
 router.post("/sessions", (req: Request, res: Response) => {
   try {
     const title = req.body.title || "新對話";
+    const folderId = req.body.folder_id || null;
     const result = sqlite
-      .prepare("INSERT INTO chat_sessions (title) VALUES (?)")
-      .run(title);
+      .prepare("INSERT INTO chat_sessions (title, folder_id) VALUES (?, ?)")
+      .run(title, folderId);
 
     const session = sqlite
       .prepare("SELECT * FROM chat_sessions WHERE id = ?")
@@ -241,18 +292,39 @@ router.post("/sessions", (req: Request, res: Response) => {
   }
 });
 
+// PUT /api/chat/sessions/:id — update session (title, folder)
+router.put("/sessions/:id", (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const { title, folder_id } = req.body;
+    sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title), folder_id = ? WHERE id = ?")
+      .run(title || null, folder_id !== undefined ? folder_id : null, id);
+    const session = sqlite.prepare("SELECT * FROM chat_sessions WHERE id = ?").get(id);
+    res.json(session);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "更新失敗" });
+  }
+});
+
 // GET /api/chat/sessions — list sessions with last message preview
 router.get("/sessions", (req: Request, res: Response) => {
   try {
-    const sessions = sqlite
-      .prepare(
-        `SELECT s.*,
+    const folderId = req.query.folder_id;
+    let query = `SELECT s.*,
           (SELECT content FROM chat_messages WHERE session_id = s.id ORDER BY created_at DESC LIMIT 1) as last_message,
           (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
-        FROM chat_sessions s
-        ORDER BY s.created_at DESC`
-      )
-      .all();
+        FROM chat_sessions s`;
+    const params: any[] = [];
+
+    if (folderId === 'null') {
+      query += " WHERE s.folder_id IS NULL";
+    } else if (folderId) {
+      query += " WHERE s.folder_id = ?";
+      params.push(Number(folderId));
+    }
+
+    query += " ORDER BY s.created_at DESC";
+    const sessions = sqlite.prepare(query).all(...params);
 
     res.json({ sessions });
   } catch (err: any) {
@@ -420,8 +492,7 @@ router.post(
         .join("\n");
 
       // 4. Select agents
-      sendEvent({ type: "phase", phase: "selecting", message: "正在決定要找誰來聊..." });
-      const selectedAgents = await selectAgentsWithAI(`${content} ${contextStr}`, 3);
+      const selectedAgents = selectAgents(`${content} ${contextStr}`, 3);
 
       sendEvent({
         type: "phase",
