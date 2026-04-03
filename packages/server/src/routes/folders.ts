@@ -9,7 +9,7 @@ router.get("/", (_req: Request, res: Response) => {
     const folders = sqlite
       .prepare("SELECT * FROM folders ORDER BY sort_order ASC, created_at ASC")
       .all();
-    res.json(folders);
+    res.json({ folders });
   } catch (err: any) {
     console.error("[folders] List error:", err);
     res.status(500).json({ error: err.message || "查詢失敗" });

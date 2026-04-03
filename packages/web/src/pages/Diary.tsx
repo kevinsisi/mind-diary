@@ -161,7 +161,7 @@ export default function Diary() {
   const fetchFolders = useCallback(async () => {
     try {
       const res = await apiClient.get<{ folders: FolderItem[] }>('/api/folders');
-      setFolders(res.folders);
+      setFolders(res.folders || []);
     } catch {
       // silent
     }
@@ -170,7 +170,7 @@ export default function Diary() {
   const fetchTags = useCallback(async () => {
     try {
       const res = await apiClient.get<{ tags: TagItem[] }>('/api/tags');
-      setTags(res.tags);
+      setTags(res.tags || []);
     } catch {
       // silent
     }

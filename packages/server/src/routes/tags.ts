@@ -15,7 +15,7 @@ router.get("/", (_req: Request, res: Response) => {
          ORDER BY count DESC`
       )
       .all();
-    res.json(tags);
+    res.json({ tags });
   } catch (err: any) {
     console.error("[tags] List error:", err);
     res.status(500).json({ error: err.message || "查詢失敗" });
