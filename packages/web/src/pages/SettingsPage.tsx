@@ -15,10 +15,16 @@ interface ApiKey {
   totalTokensOut: number;
 }
 
+interface UsagePeriod {
+  calls: number;
+  tokens_in: number;
+  tokens_out: number;
+}
+
 interface UsageStats {
-  today: { calls: number; tokens: number };
-  week: { calls: number; tokens: number };
-  month: { calls: number; tokens: number };
+  today: UsagePeriod;
+  last7d: UsagePeriod;
+  last30d: UsagePeriod;
 }
 
 export default function SettingsPage() {
@@ -157,8 +163,8 @@ export default function SettingsPage() {
         <div className="mb-6 grid grid-cols-3 gap-4">
           {[
             { label: '今日', data: usage.today },
-            { label: '7 天', data: usage.week },
-            { label: '30 天', data: usage.month },
+            { label: '7 天', data: usage.last7d },
+            { label: '30 天', data: usage.last30d },
           ].map(({ label, data }) => (
             <div key={label} className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
@@ -166,7 +172,7 @@ export default function SettingsPage() {
                 {label}
               </div>
               <div className="text-2xl font-bold text-gray-900">{data.calls} <span className="text-sm font-normal text-gray-400">次呼叫</span></div>
-              <div className="text-sm text-gray-500">{formatTokens(data.tokens)} tokens</div>
+              <div className="text-sm text-gray-500">{formatTokens(data.tokens_in + data.tokens_out)} tokens</div>
             </div>
           ))}
         </div>
