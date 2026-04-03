@@ -55,7 +55,7 @@ async function runAgent(
     message: `${agent.name} 正在分析...`,
   });
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
     model,
@@ -120,7 +120,7 @@ async function synthesize(
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
       systemInstruction: MASTER_AGENT_PROMPT,
       generationConfig: { maxOutputTokens: 1024 },
     });
@@ -140,7 +140,7 @@ async function synthesize(
     const response = await streamResult.response;
     const usage = response.usageMetadata;
     if (usage) {
-      trackUsageByKey(apiKey, process.env.GEMINI_MODEL || 'gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-master');
+      trackUsageByKey(apiKey, process.env.GEMINI_MODEL || 'gemini-2.0-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'diary-master');
     }
 
     return fullText;
@@ -154,7 +154,7 @@ async function generateTags(title: string, content: string): Promise<string[]> {
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
       systemInstruction: '你是標籤生成助手。根據日記標題和內容，生成 2-5 個簡短的繁體中文標籤。每個標籤 1-4 個字。只回傳標籤，用逗號分隔。不加井號。',
       generationConfig: { maxOutputTokens: 100 },
     });

@@ -89,7 +89,7 @@ ${agent.systemPrompt}
 - 用對話的口吻，不要像報告
 - 如果有相關資料被提供，引用它`;
 
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
     model,
@@ -178,7 +178,7 @@ async function synthesizeChat(
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
       systemInstruction: MASTER_CHAT_PROMPT,
       generationConfig: { maxOutputTokens: 1024 },
     });
@@ -207,7 +207,7 @@ async function synthesizeChat(
     if (usage) {
       trackUsageByKey(
         apiKey,
-        process.env.GEMINI_MODEL || "gemini-2.5-flash",
+        process.env.GEMINI_MODEL || "gemini-2.0-flash",
         usage.promptTokenCount || 0,
         usage.candidatesTokenCount || 0,
         "chat-master"
