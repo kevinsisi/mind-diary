@@ -1,8 +1,225 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
-import { chatWithContext } from "../ai/geminiClient.js";
+import { AGENTS, MASTER_AGENT_PROMPT, AgentPersona } from "../ai/agents.js";
+import { withGeminiRetry } from "../ai/geminiRetry.js";
+import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = Router();
+
+// ── SSE helpers ──────────────────────────────────────────────────────
+
+function sseWrite(res: Response, event: Record<string, any>): void {
+  res.write(`data: ${JSON.stringify(event)}\n\n`);
+  if (typeof (res as any).flush === "function") {
+    (res as any).flush();
+  }
+}
+
+// ── Agent selection for chat ─────────────────────────────────────────
+
+function selectChatAgents(message: string, context: string): AgentPersona[] {
+  const text = `${message} ${context}`.toLowerCase();
+  const scored = Object.values(AGENTS).map((agent) => {
+    const score = agent.topics.reduce((sum, topic) => {
+      return sum + (text.includes(topic) ? 1 : 0);
+    }, 0);
+    return { agent, score };
+  });
+
+  // Emotional keywords trigger xiaoyu
+  const emotionalKeywords = [
+    "情緒", "心情", "壓力", "焦慮", "開心", "難過", "憂鬱",
+    "孤獨", "感恩", "哭", "淚", "累", "煩", "怕", "傷心",
+    "生氣", "沮喪", "快樂", "幸福", "感動",
+  ];
+  const hasEmotion = emotionalKeywords.some((kw) => text.includes(kw));
+
+  const selected = scored.filter(
+    (s) => s.score > 0 || (hasEmotion && s.agent.id === "xiaoyu")
+  );
+
+  // Always include at least azhe as default
+  if (!selected.find((s) => s.agent.id === "azhe")) {
+    const azhe = Object.values(AGENTS).find((a) => a.id === "azhe")!;
+    selected.push({ agent: azhe, score: 0 });
+  }
+
+  // If only 1 agent, add xiaoyu as second
+  if (selected.length < 2) {
+    if (!selected.find((s) => s.agent.id === "xiaoyu")) {
+      const xiaoyu = Object.values(AGENTS).find((a) => a.id === "xiaoyu")!;
+      selected.push({ agent: xiaoyu, score: 0 });
+    }
+  }
+
+  // Max 3 agents for chat (keep it snappy)
+  return selected
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((s) => s.agent);
+}
+
+// ── Run a single agent in chat mode ──────────────────────────────────
+
+async function runChatAgent(
+  agent: AgentPersona,
+  userMessage: string,
+  contextStr: string,
+  historyStr: string,
+  apiKey: string,
+  onEvent: (event: Record<string, any>) => void
+): Promise<{ agentId: string; result: string }> {
+  onEvent({
+    type: "agent-start",
+    agentId: agent.id,
+    agentName: agent.name,
+    agentEmoji: agent.emoji,
+    agentRole: agent.role,
+  });
+
+  const chatSystemPrompt = `你是「${agent.name}」（${agent.role}），正在和其他 AI 好友一起回應使用者的訊息。
+
+${agent.systemPrompt}
+
+【對話模式注意事項】
+- 你的回應會被整合到最終回覆中
+- 保持簡短（2-3句話）
+- 用對話的口吻，不要像報告
+- 如果有相關資料被提供，引用它`;
+
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20";
+  const genai = new GoogleGenerativeAI(apiKey);
+  const geminiModel = genai.getGenerativeModel({
+    model,
+    systemInstruction: chatSystemPrompt,
+    generationConfig: { maxOutputTokens: 300 },
+  });
+
+  let prompt = `使用者訊息：${userMessage}`;
+  if (contextStr) {
+    prompt += `\n\n【相關資料】\n${contextStr}`;
+  }
+  if (historyStr) {
+    prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
+  }
+
+  const streamResult = await geminiModel.generateContentStream(prompt);
+  let fullText = "";
+
+  for await (const chunk of streamResult.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      onEvent({
+        type: "agent-thinking",
+        agentId: agent.id,
+        agentName: agent.name,
+        agentEmoji: agent.emoji,
+        content: text,
+      });
+    }
+  }
+
+  // Track usage
+  const response = await streamResult.response;
+  const usage = response.usageMetadata;
+  if (usage) {
+    trackUsageByKey(
+      apiKey,
+      model,
+      usage.promptTokenCount || 0,
+      usage.candidatesTokenCount || 0,
+      "chat-agent"
+    );
+  }
+
+  onEvent({
+    type: "agent-done",
+    agentId: agent.id,
+    agentName: agent.name,
+    agentEmoji: agent.emoji,
+    content: fullText,
+  });
+
+  return { agentId: agent.id, result: fullText };
+}
+
+// ── Master synthesis for chat ────────────────────────────────────────
+
+const MASTER_CHAT_PROMPT = `你是心靈日記的 AI 助手，正在和使用者對話。多位 AI 好友已經各自分析了使用者的訊息。
+
+請根據他們的分析，以及相關的資料庫搜尋結果，產出一段自然流暢的回覆。
+
+規則：
+- 繁體中文
+- 自然對話口吻，像朋友聊天
+- 融合各好友的觀點但不要提到他們的名字
+- 如果有參考到使用者的日記或檔案，自然提及
+- 長度適中（3-8句話）`;
+
+async function synthesizeChat(
+  agentResults: Array<{ agentId: string; result: string }>,
+  userMessage: string,
+  contextStr: string,
+  historyStr: string,
+  onEvent: (event: Record<string, any>) => void
+): Promise<string> {
+  onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
+
+  const analysisBlock = agentResults
+    .map((r) => {
+      const agent = AGENTS[r.agentId];
+      return `【${agent.emoji} ${agent.name}（${agent.role}）的觀點】\n${r.result}`;
+    })
+    .join("\n\n");
+
+  const result = await withGeminiRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20",
+      systemInstruction: MASTER_CHAT_PROMPT,
+      generationConfig: { maxOutputTokens: 1024 },
+    });
+
+    let prompt = `使用者訊息：${userMessage}\n\n`;
+    if (contextStr) {
+      prompt += `【相關資料】\n${contextStr}\n\n`;
+    }
+    if (historyStr) {
+      prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+    }
+    prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
+
+    let fullText = "";
+    const streamResult = await model.generateContentStream(prompt);
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullText += text;
+        onEvent({ type: "synthesizing", content: text });
+      }
+    }
+
+    const response = await streamResult.response;
+    const usage = response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(
+        apiKey,
+        process.env.GEMINI_MODEL || "gemini-2.5-flash-preview-05-20",
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0,
+        "chat-master"
+      );
+    }
+
+    return fullText;
+  });
+
+  return result;
+}
+
+// ── Sessions CRUD (unchanged) ────────────────────────────────────────
 
 // POST /api/chat/sessions — create new session
 router.post("/sessions", (req: Request, res: Response) => {
@@ -69,35 +286,79 @@ router.delete("/sessions/:id", (req: Request, res: Response) => {
   }
 });
 
-// POST /api/chat/sessions/:id/messages — send message, get AI response
+// ── POST /api/chat/sessions/:id/messages — SSE streaming multi-agent ─
+
 router.post(
   "/sessions/:id/messages",
   async (req: Request, res: Response) => {
+    const sessionId = Number(req.params.id);
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ error: "訊息內容不能為空" });
+    }
+
+    // Verify session exists
+    const session = sqlite
+      .prepare("SELECT * FROM chat_sessions WHERE id = ?")
+      .get(sessionId) as { id: number; title: string } | undefined;
+
+    if (!session) {
+      return res.status(404).json({ error: "對話不存在" });
+    }
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+
+    // Heartbeat to keep connection alive
+    const heartbeat = setInterval(() => {
+      res.write(": heartbeat\n\n");
+      if (typeof (res as any).flush === "function") {
+        (res as any).flush();
+      }
+    }, 15000);
+
+    // Handle client disconnect
+    let aborted = false;
+    req.on("close", () => {
+      aborted = true;
+      clearInterval(heartbeat);
+    });
+
+    const sendEvent = (event: Record<string, any>) => {
+      if (!aborted) sseWrite(res, event);
+    };
+
     try {
-      const sessionId = Number(req.params.id);
-      const { content } = req.body;
-
-      if (!content) {
-        return res.status(400).json({ error: "訊息內容不能為空" });
-      }
-
-      // Verify session exists
-      const session = sqlite
-        .prepare("SELECT id FROM chat_sessions WHERE id = ?")
-        .get(sessionId);
-
-      if (!session) {
-        return res.status(404).json({ error: "對話不存在" });
-      }
-
-      // Save user message
+      // 1. Save user message
       sqlite
         .prepare(
           "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'user', ?)"
         )
         .run(sessionId, content);
 
-      // Search FTS5 for relevant context from files and diary
+      // Update session title to first message content (truncated) if it's the first message
+      const msgCount = (
+        sqlite
+          .prepare(
+            "SELECT COUNT(*) as count FROM chat_messages WHERE session_id = ?"
+          )
+          .get(sessionId) as { count: number }
+      ).count;
+
+      if (msgCount === 1) {
+        const truncatedTitle = content.slice(0, 20) + (content.length > 20 ? "..." : "");
+        sqlite
+          .prepare("UPDATE chat_sessions SET title = ? WHERE id = ?")
+          .run(truncatedTitle, sessionId);
+      }
+
+      // 2. Search FTS5 for relevant context
+      sendEvent({ type: "phase", phase: "searching", message: "搜尋相關資料..." });
+
       let contextParts: string[] = [];
 
       try {
@@ -140,27 +401,90 @@ router.post(
         // FTS match might fail; ignore
       }
 
-      const contextStr = contextParts.length > 0
-        ? contextParts.join("\n\n")
-        : "";
+      const contextStr =
+        contextParts.length > 0 ? contextParts.join("\n\n") : "";
 
-      // Get conversation history
+      // 3. Get conversation history (last 5 messages for context)
       const history = sqlite
         .prepare(
-          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC"
+          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 10"
         )
         .all(sessionId) as Array<{ role: string; content: string }>;
 
-      // Call AI
-      let aiResponse: string;
-      try {
-        aiResponse = await chatWithContext(content, contextStr, history);
-      } catch (err) {
-        console.error("[chat] AI response failed:", err);
-        aiResponse = "抱歉，AI 回應暫時無法使用。請確認 API 金鑰已正確設定。";
+      // Reverse to chronological order and format
+      const historyStr = history
+        .reverse()
+        .slice(0, -1) // exclude the just-inserted user message (it's the prompt)
+        .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
+        .join("\n");
+
+      // 4. Select agents
+      const selectedAgents = selectChatAgents(content, contextStr);
+
+      sendEvent({
+        type: "phase",
+        phase: "thinking",
+        message: `派出 ${selectedAgents.length} 位好友討論`,
+        agents: selectedAgents.map((a) => ({
+          id: a.id,
+          name: a.name,
+          emoji: a.emoji,
+          role: a.role,
+        })),
+      });
+
+      // 5. Run agents in parallel with batch keys
+      const keys = assignBatchKeys(selectedAgents.length);
+      const agentPromises = selectedAgents.map((agent, i) => {
+        const key = keys[i % keys.length];
+        return runChatAgent(
+          agent,
+          content,
+          contextStr,
+          historyStr,
+          key,
+          sendEvent
+        ).catch((err) => {
+          console.error(`[chat] Agent ${agent.id} failed:`, err);
+          sendEvent({
+            type: "agent-done",
+            agentId: agent.id,
+            agentName: agent.name,
+            agentEmoji: agent.emoji,
+            content: "（暫時無法回應）",
+          });
+          return { agentId: agent.id, result: "（暫時無法回應）" };
+        });
+      });
+
+      const agentResults = await Promise.all(agentPromises);
+
+      if (aborted) {
+        clearInterval(heartbeat);
+        return;
       }
 
-      // Save assistant message
+      // 6. Master synthesis
+      sendEvent({
+        type: "phase",
+        phase: "synthesizing",
+        message: "整合回覆中...",
+      });
+
+      const aiResponse = await synthesizeChat(
+        agentResults,
+        content,
+        contextStr,
+        historyStr,
+        sendEvent
+      );
+
+      if (aborted) {
+        clearInterval(heartbeat);
+        return;
+      }
+
+      // 7. Save assistant message
       const result = sqlite
         .prepare(
           "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'assistant', ?)"
@@ -169,12 +493,32 @@ router.post(
 
       const assistantMessage = sqlite
         .prepare("SELECT * FROM chat_messages WHERE id = ?")
-        .get(result.lastInsertRowid);
+        .get(result.lastInsertRowid) as {
+        id: number;
+        role: string;
+        content: string;
+        created_at: string;
+      };
 
-      res.status(201).json(assistantMessage);
+      // 8. Stream complete event
+      sendEvent({
+        type: "complete",
+        message: {
+          id: assistantMessage.id,
+          role: assistantMessage.role,
+          content: assistantMessage.content,
+          created_at: assistantMessage.created_at,
+        },
+      });
     } catch (err: any) {
-      console.error("[chat] Send message error:", err);
-      res.status(500).json({ error: err.message || "發送失敗" });
+      console.error("[chat] SSE message error:", err);
+      sendEvent({
+        type: "error",
+        message: err.message || "處理訊息時發生錯誤",
+      });
+    } finally {
+      clearInterval(heartbeat);
+      if (!aborted) res.end();
     }
   }
 );
