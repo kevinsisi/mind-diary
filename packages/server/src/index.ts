@@ -11,6 +11,8 @@ import diaryRouter from "./routes/diary.js";
 import chatRouter from "./routes/chat.js";
 import searchRouter from "./routes/search.js";
 import settingsRouter from "./routes/settings.js";
+import foldersRouter from "./routes/folders.js";
+import tagsRouter from "./routes/tags.js";
 
 // ── Run migrations ─────────────────────────────────────────────────
 runMigrations(sqlite);
@@ -37,6 +39,8 @@ app.use("/api/diary", diaryRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/search", searchRouter);
 app.use("/api/settings", settingsRouter);
+app.use("/api/folders", foldersRouter);
+app.use("/api/tags", tagsRouter);
 
 // ── Serve frontend in production ───────────────────────────────────
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

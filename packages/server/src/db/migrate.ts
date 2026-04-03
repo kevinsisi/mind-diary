@@ -90,7 +90,38 @@ export function runMigrations(db: Database.Database): void {
       content,
       tokenize = 'unicode61'
     );
+
+    -- Tags (AI auto-generated + user-created)
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      color TEXT NOT NULL DEFAULT '#6366f1',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Diary-Tag junction
+    CREATE TABLE IF NOT EXISTS diary_entry_tags (
+      diary_id INTEGER NOT NULL REFERENCES diary_entries(id) ON DELETE CASCADE,
+      tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      PRIMARY KEY (diary_id, tag_id)
+    );
+
+    -- Folders for diary organization
+    CREATE TABLE IF NOT EXISTS folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      parent_id INTEGER REFERENCES folders(id),
+      icon TEXT DEFAULT '📁',
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  // Add folder_id column if it doesn't exist
+  const columns = db.prepare("PRAGMA table_info(diary_entries)").all() as any[];
+  if (!columns.some((c: any) => c.name === 'folder_id')) {
+    db.exec("ALTER TABLE diary_entries ADD COLUMN folder_id INTEGER REFERENCES folders(id)");
+  }
 
   console.log("[migrate] All tables and FTS indexes created.");
 }

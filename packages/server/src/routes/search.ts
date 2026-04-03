@@ -10,6 +10,14 @@ interface SearchResult {
   snippet: string;
   created_at: string;
   rank: number;
+  tags?: string[];
+}
+
+function getEntryTags(entryId: number): string[] {
+  const rows = sqlite.prepare(
+    `SELECT t.name FROM tags t JOIN diary_entry_tags dt ON dt.tag_id = t.id WHERE dt.diary_id = ?`
+  ).all(entryId) as { name: string }[];
+  return rows.map(r => r.name);
 }
 
 // GET /api/search?q=...&page=1&limit=20 — unified search
@@ -67,6 +75,10 @@ router.get("/", (req: Request, res: Response) => {
         )
         .all(q) as SearchResult[];
 
+      // Attach tags to diary results
+      for (const r of diaryResults) {
+        r.tags = getEntryTags(r.id);
+      }
       results.push(...diaryResults);
     } catch {
       // FTS match can fail on syntax errors; skip

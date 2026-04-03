@@ -188,6 +188,29 @@ export async function generateDiaryReflection(
   return result.text;
 }
 
+/**
+ * Auto-generate tags for diary content using AI.
+ * Returns an array of 2-5 short tag names in Traditional Chinese.
+ */
+export async function generateAutoTags(content: string, title: string): Promise<string[]> {
+  const result = await generateText(`標題：${title}\n\n內容：${content}`, {
+    systemPrompt: `你是一個標籤生成助手。根據日記的標題和內容，生成 2-5 個簡短的繁體中文標籤。
+
+規則：
+- 每個標籤 1-4 個字（例如：工作、旅行、心情、學習、健康）
+- 只回傳標籤，用逗號分隔
+- 不要加井號或其他符號
+- 涵蓋主題、情緒、活動等不同面向`,
+    maxTokens: 100,
+  });
+
+  return result.text
+    .split(/[,，、]/)
+    .map(t => t.trim())
+    .filter(t => t.length > 0 && t.length <= 10)
+    .slice(0, 5);
+}
+
 // ── Backward-compatible aliases ───────────────────────────────────────
 
 /** @deprecated Use generateDiaryReflection instead */
