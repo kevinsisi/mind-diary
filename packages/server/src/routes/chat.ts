@@ -93,7 +93,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   let fullText = "";
 
   // Use withStreamRetry for automatic key rotation on 429
@@ -173,7 +173,7 @@ async function synthesizeChat(
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       systemInstruction: MASTER_CHAT_PROMPT,
       generationConfig: { maxOutputTokens: 1024 },
     });
@@ -202,7 +202,7 @@ async function synthesizeChat(
     if (usage) {
       trackUsageByKey(
         apiKey,
-        process.env.GEMINI_MODEL || "gemini-2.0-flash",
+        process.env.GEMINI_MODEL || "gemini-2.5-flash",
         usage.promptTokenCount || 0,
         usage.candidatesTokenCount || 0,
         "chat-master"
