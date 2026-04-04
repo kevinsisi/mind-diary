@@ -11,6 +11,7 @@ class ApiError extends Error {
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const options: RequestInit = {
     method,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
     },
@@ -35,7 +36,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 }
 
 async function requestFormData<T>(method: string, path: string, formData: FormData): Promise<T> {
-  const response = await fetch(path, { method, body: formData });
+  const response = await fetch(path, { method, credentials: 'include', body: formData });
 
   if (!response.ok) {
     const text = await response.text().catch(() => 'Unknown error');

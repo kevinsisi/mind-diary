@@ -19,44 +19,85 @@ export interface AnalysisEvent {
 
 export type OnEvent = (event: AnalysisEvent) => void;
 
-// Determine which agents should analyze this entry
-// Instant keyword-based agent selection (no API call, zero latency)
-export function selectAgents(text: string, maxAgents: number = 4): AgentPersona[] {
-  const lower = text.toLowerCase();
-  const scored = Object.values(AGENTS).map(agent => {
-    const score = agent.topics.reduce((sum, topic) => sum + (lower.includes(topic) ? 1 : 0), 0);
-    return { agent, score };
-  });
+// AI-based agent selection result
+export interface AgentSelection {
+  agent: AgentPersona;
+  reason: string;
+}
 
-  // Filter to agents that matched at least one keyword
-  const matched = scored.filter(s => s.score > 0);
+// Agent selection system prompt
+function buildSelectionPrompt(maxAgents: number): string {
+  const agentList = Object.values(AGENTS)
+    .map(a => `- ${a.id}（${a.name}，${a.role}）：${a.description}`)
+    .join('\n');
 
-  if (matched.length > 0) {
-    // Return matched agents sorted by score, capped at maxAgents
-    return matched.sort((a, b) => b.score - a.score).slice(0, maxAgents).map(s => s.agent);
-  }
+  return `你是「心靈日記」的 AI 好友調度員。根據使用者的訊息或日記內容，選出最適合的好友來回應。
 
-  // No keyword matches — pick a smart default based on message content
-  const questionWords = ['想知道', '要不要', '該不該', '怎麼', '如何', '可以', '好不好'];
-  const emotionWords = ['心情', '情緒', '難過', '開心', '哭', '累', '煩', '怕', '崩潰', '心累', '受不了', '撐不住', '不想'];
-  const relationshipWords = ['關係', '感情', '家人', '朋友', '伴侶', '相處', '溝通'];
-  const healthWords = ['健康', '身體', '痛', '不舒服', '生病', '醫生', '睡眠'];
+好友列表：
+${agentList}
 
-  if (emotionWords.some(w => lower.includes(w))) {
-    return [AGENTS['xiaoyu']];
-  }
-  if (relationshipWords.some(w => lower.includes(w))) {
-    return [AGENTS['xinxin']];
-  }
-  if (healthWords.some(w => lower.includes(w))) {
-    return [AGENTS['dran']];
-  }
-  if (questionWords.some(w => lower.includes(w))) {
-    return [AGENTS['azhe']];
-  }
+請以 JSON 格式回傳（只能回傳 JSON，不能有其他文字）：
+{
+  "selected": [
+    { "id": "agent_id", "reason": "選擇這位好友的具體原因（1-2句話）" }
+  ],
+  "summary": "用溫暖的語氣告訴使用者，你為什麼請了這些好友，以及他們能幫什麼"
+}
 
-  // Truly generic fallback — single general advisor
-  return [AGENTS['azhe']];
+規則：
+- 最多選 ${maxAgents} 位，最少 1 位
+- 根據訊息的主要主題、情境、需求來選擇
+- reason 要說明訊息中哪些內容讓你選了這位好友
+- summary 是給使用者看的，要自然、溫暖、繁體中文
+- 如果訊息很一般或不明確，選最相關的 1-2 位即可`;
+}
+
+// Use Gemini AI to select the most appropriate agents
+export async function selectAgentsWithAI(
+  text: string,
+  maxAgents: number = 3,
+): Promise<{ selections: AgentSelection[]; summary: string }> {
+  const systemPrompt = buildSelectionPrompt(maxAgents);
+
+  try {
+    const raw = await withGeminiRetry(async (apiKey) => {
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        systemInstruction: systemPrompt,
+        generationConfig: {
+          maxOutputTokens: 512,
+          responseMimeType: 'application/json',
+        },
+      });
+      const res = await model.generateContent(text.slice(0, 2000)); // cap context length
+      return res.response.text();
+    });
+
+    const parsed = JSON.parse(raw);
+    const selections: AgentSelection[] = [];
+
+    for (const item of parsed.selected || []) {
+      const agent = AGENTS[item.id];
+      if (agent) {
+        selections.push({ agent, reason: item.reason || '' });
+      }
+    }
+
+    if (selections.length === 0) throw new Error('No valid agents returned');
+
+    return {
+      selections,
+      summary: parsed.summary || `我請了${selections.map(s => s.agent.name).join('和')}來為你回應`,
+    };
+  } catch (err) {
+    // Error fallback: pick xiaoyu (emotional support) as universal default
+    const fallback = AGENTS['xiaoyu'];
+    return {
+      selections: [{ agent: fallback, reason: '作為你的心靈夥伴陪你聊聊' }],
+      summary: `讓${fallback.name}來陪你聊聊吧`,
+    };
+  }
 }
 
 // Run a single agent analysis
@@ -196,9 +237,10 @@ export async function analyzeDiary(
   onEvent: OnEvent,
   imageContext?: string
 ): Promise<{ reflection: string; tags: string[]; agentResults: Array<{ agentId: string; name: string; emoji: string; role: string; result: string }> }> {
-  // Phase 1: Select agents (instant keyword matching)
-  onEvent({ type: 'phase', phase: 'analyzing', message: '正在分析日記內容...' });
-  const selectedAgents = selectAgents(`${title} ${content}`, 4);
+  // Phase 1: AI-based agent selection
+  onEvent({ type: 'phase', phase: 'analyzing', message: 'AI 分析日記內容，選擇最適合的好友...' });
+  const { selections } = await selectAgentsWithAI(`日記標題：${title}\n\n日記內容：${content.slice(0, 1000)}`, 4);
+  const selectedAgents = selections.map(s => s.agent);
 
   onEvent({
     type: 'phase',

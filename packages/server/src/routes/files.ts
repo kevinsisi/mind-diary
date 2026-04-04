@@ -4,6 +4,7 @@ import path from "node:path";
 import { sqlite } from "../db/connection.js";
 import { extractText, deleteFile } from "../services/fileService.js";
 import { generateSummary } from "../ai/geminiClient.js";
+import { optionalAuth } from "../middleware/auth.js";
 
 // ── Multer config ─────────────────────────────────────────────────
 const UPLOAD_DIR = path.resolve(
@@ -52,6 +53,9 @@ const upload = multer({
 // ── Router ────────────────────────────────────────────────────────
 const router = Router();
 
+// Files are accessible to guests (user_id=0 = public space)
+router.use(optionalAuth);
+
 // POST /api/files — upload file
 router.post("/", upload.single("file"), async (req: Request, res: Response) => {
   try {
@@ -74,10 +78,10 @@ router.post("/", upload.single("file"), async (req: Request, res: Response) => {
       }
     }
 
-    // Insert into files table
+    // Insert into files table with user_id
     const stmt = sqlite.prepare(`
-      INSERT INTO files (filename, mimetype, size, filepath, content_text, ai_summary)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO files (filename, mimetype, size, filepath, content_text, ai_summary, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       originalname,
@@ -85,7 +89,8 @@ router.post("/", upload.single("file"), async (req: Request, res: Response) => {
       size,
       filepath,
       contentText || null,
-      aiSummary
+      aiSummary,
+      req.userId
     );
 
     const fileId = result.lastInsertRowid;
@@ -111,7 +116,7 @@ router.post("/", upload.single("file"), async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/files — list files (paginated)
+// GET /api/files — list files (paginated, filtered by user_id)
 router.get("/", (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
@@ -119,14 +124,14 @@ router.get("/", (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     const total = sqlite
-      .prepare("SELECT COUNT(*) as count FROM files")
-      .get() as { count: number };
+      .prepare("SELECT COUNT(*) as count FROM files WHERE user_id = ?")
+      .get(req.userId) as { count: number };
 
     const files = sqlite
       .prepare(
-        "SELECT id, filename, mimetype, size, ai_summary, created_at FROM files ORDER BY created_at DESC LIMIT ? OFFSET ?"
+        "SELECT id, filename, mimetype, size, ai_summary, created_at FROM files WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?"
       )
-      .all(limit, offset);
+      .all(req.userId, limit, offset);
 
     res.json({
       files,
@@ -143,12 +148,12 @@ router.get("/", (req: Request, res: Response) => {
   }
 });
 
-// GET /api/files/:id — get single file
+// GET /api/files/:id — get single file (must belong to current user)
 router.get("/:id", (req: Request, res: Response) => {
   try {
     const file = sqlite
-      .prepare("SELECT * FROM files WHERE id = ?")
-      .get(Number(req.params.id));
+      .prepare("SELECT * FROM files WHERE id = ? AND user_id = ?")
+      .get(Number(req.params.id), req.userId);
 
     if (!file) {
       return res.status(404).json({ error: "檔案不存在" });
@@ -161,12 +166,12 @@ router.get("/:id", (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/files/:id — delete file
+// DELETE /api/files/:id — delete file (must belong to current user)
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const file = sqlite
-      .prepare("SELECT * FROM files WHERE id = ?")
-      .get(Number(req.params.id)) as any;
+      .prepare("SELECT * FROM files WHERE id = ? AND user_id = ?")
+      .get(Number(req.params.id), req.userId) as any;
 
     if (!file) {
       return res.status(404).json({ error: "檔案不存在" });
@@ -192,8 +197,8 @@ router.delete("/:id", async (req: Request, res: Response) => {
 router.post("/:id/resummarize", async (req: Request, res: Response) => {
   try {
     const file = sqlite
-      .prepare("SELECT * FROM files WHERE id = ?")
-      .get(Number(req.params.id)) as any;
+      .prepare("SELECT * FROM files WHERE id = ? AND user_id = ?")
+      .get(Number(req.params.id), req.userId) as any;
 
     if (!file) {
       return res.status(404).json({ error: "檔案不存在" });

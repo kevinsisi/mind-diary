@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Upload,
   FileText,
@@ -70,6 +71,7 @@ const ACCEPT =
 // ── Component ─────────────────────────────────────────────────────
 
 export default function Files() {
+  const { user } = useAuth();
   const [files, setFiles] = useState<FileItem[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
     page: 1,
@@ -213,6 +215,11 @@ export default function Files() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {!user && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+          您目前以訪客身份瀏覽，資料為公共空間。<a href="/login" className="underline font-medium ml-1">登入</a>以存取個人檔案。
+        </div>
+      )}
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900">檔案管理</h2>

@@ -1,7 +1,11 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
+import { optionalAuth } from "../middleware/auth.js";
 
 const router = Router();
+
+// Search is accessible to guests; results are scoped to current user (or guest public space)
+router.use(optionalAuth);
 
 interface SearchResult {
   id: number;
@@ -31,10 +35,11 @@ router.get("/", (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const offset = (page - 1) * limit;
+    const userId = req.userId;
 
     const results: SearchResult[] = [];
 
-    // Search files FTS5
+    // Search files FTS5 — JOIN main table to filter by user_id
     try {
       const fileResults = sqlite
         .prepare(
@@ -47,17 +52,17 @@ router.get("/", (req: Request, res: Response) => {
             files_fts.rank
           FROM files_fts
           JOIN files f ON f.id = files_fts.rowid
-          WHERE files_fts MATCH ?
+          WHERE files_fts MATCH ? AND f.user_id = ?
           ORDER BY files_fts.rank`
         )
-        .all(q) as SearchResult[];
+        .all(q, userId) as SearchResult[];
 
       results.push(...fileResults);
     } catch {
       // FTS match can fail on syntax errors; skip
     }
 
-    // Search diary FTS5 (title + content)
+    // Search diary FTS5 (title + content) — filter by user_id
     const foundDiaryIds = new Set<number>();
     try {
       const diaryResults = sqlite
@@ -71,10 +76,10 @@ router.get("/", (req: Request, res: Response) => {
             diary_fts.rank
           FROM diary_fts
           JOIN diary_entries d ON d.id = diary_fts.rowid
-          WHERE diary_fts MATCH ?
+          WHERE diary_fts MATCH ? AND d.user_id = ?
           ORDER BY diary_fts.rank`
         )
-        .all(q) as SearchResult[];
+        .all(q, userId) as SearchResult[];
 
       for (const r of diaryResults) {
         r.tags = getEntryTags(r.id);
@@ -97,10 +102,10 @@ router.get("/", (req: Request, res: Response) => {
             d.created_at,
             0 as rank
           FROM diary_entries d
-          WHERE (d.title LIKE ? OR d.content LIKE ?)
+          WHERE (d.title LIKE ? OR d.content LIKE ?) AND d.user_id = ?
           ORDER BY d.created_at DESC`
         )
-        .all(`%${q}%`, `%${q}%`) as SearchResult[];
+        .all(`%${q}%`, `%${q}%`, userId) as SearchResult[];
 
       for (const r of likeResults) {
         if (!foundDiaryIds.has(r.id)) {
@@ -113,7 +118,7 @@ router.get("/", (req: Request, res: Response) => {
       // skip
     }
 
-    // Search diary by tag name (LIKE match)
+    // Search diary by tag name (LIKE match) — filter by user_id
     try {
       const tagResults = sqlite
         .prepare(
@@ -127,10 +132,10 @@ router.get("/", (req: Request, res: Response) => {
           FROM diary_entries d
           JOIN diary_entry_tags dt ON dt.diary_id = d.id
           JOIN tags t ON t.id = dt.tag_id
-          WHERE t.name LIKE ?
+          WHERE t.name LIKE ? AND d.user_id = ?
           ORDER BY d.created_at DESC`
         )
-        .all(`%${q}%`) as SearchResult[];
+        .all(`%${q}%`, userId) as SearchResult[];
 
       for (const r of tagResults) {
         if (!foundDiaryIds.has(r.id)) {
@@ -142,7 +147,7 @@ router.get("/", (req: Request, res: Response) => {
       // skip
     }
 
-    // Search chat sessions by title
+    // Search chat sessions by title — filter by user_id
     try {
       const chatResults = sqlite
         .prepare(
@@ -157,10 +162,10 @@ router.get("/", (req: Request, res: Response) => {
             s.created_at,
             0 as rank
           FROM chat_sessions s
-          WHERE s.title LIKE ?
+          WHERE s.title LIKE ? AND s.user_id = ?
           ORDER BY s.created_at DESC`
         )
-        .all(`%${q}%`) as SearchResult[];
+        .all(`%${q}%`, userId) as SearchResult[];
 
       results.push(...chatResults);
     } catch {

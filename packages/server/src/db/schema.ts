@@ -3,9 +3,19 @@ import { sql } from "drizzle-orm";
 
 const defaultNow = sql`(datetime('now'))`;
 
+// ── Users ──────────────────────────────────────────────────────────
+export const users = sqliteTable("users", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  username: text("username").notNull().unique(),
+  password_hash: text("password_hash").notNull(),
+  role: text("role").notNull().default("user"), // 'admin' | 'user'
+  created_at: text("created_at").notNull().default(defaultNow),
+});
+
 // ── Files ──────────────────────────────────────────────────────────
 export const files = sqliteTable("files", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull().default(1),
   filename: text("filename").notNull(),
   mimetype: text("mimetype").notNull(),
   size: integer("size").notNull(),
@@ -18,6 +28,7 @@ export const files = sqliteTable("files", {
 // ── Diary Entries ──────────────────────────────────────────────────
 export const diaryEntries = sqliteTable("diary_entries", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull().default(1),
   title: text("title").notNull(),
   content: text("content").notNull(),
   mood: text("mood"),
@@ -29,6 +40,7 @@ export const diaryEntries = sqliteTable("diary_entries", {
 // ── Chat Sessions ──────────────────────────────────────────────────
 export const chatSessions = sqliteTable("chat_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull().default(1),
   title: text("title").notNull().default("新對話"),
   created_at: text("created_at").notNull().default(defaultNow),
 });

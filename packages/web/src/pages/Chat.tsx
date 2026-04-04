@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   Plus,
   Trash2,
@@ -39,6 +40,7 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  image_url?: string;
   ai_agents?: string;
   dispatch_reason?: string;
 }
@@ -64,12 +66,13 @@ interface ChatSSEEvent {
   type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'complete' | 'error' | 'intent';
   phase?: string;
   message?: string | { id: number; role: string; content: string; created_at: string; ai_agents?: string; dispatch_reason?: string };
+  userMessage?: { id: number; role: string; content: string; image_url?: string; created_at: string };
   agentId?: string;
   agentName?: string;
   agentEmoji?: string;
   agentRole?: string;
   content?: string;
-  agents?: Array<{ id: string; name: string; emoji: string; role: string }>;
+  agents?: Array<{ id: string; name: string; emoji: string; role: string; reason?: string }>;
   reasons?: Record<string, string>;
   summary?: string;
 }
@@ -212,7 +215,7 @@ function ThinkingCard({
                   <span className="text-xs font-medium text-gray-900">{agent.name}</span>
                   <span className="text-xs text-gray-400">{agent.role}</span>
                   {thinking.agentReasons[id] && (
-                    <span className="text-[10px] text-gray-400 italic ml-1 truncate hidden sm:inline">
+                    <span className="text-[10px] text-gray-400 italic ml-1">
                       — {thinking.agentReasons[id]}
                     </span>
                   )}
@@ -480,6 +483,7 @@ function SessionItem({
 // ── Component ─────────────────────────────────────────────────────
 
 export default function Chat() {
+  const { user } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -757,12 +761,13 @@ export default function Chat() {
     clearChatImage();
     setSendingMessage(true);
 
-    // Optimistic: add user message immediately
+    // Optimistic: add user message immediately (with local preview URL for image)
     const tempUserMsg: Message = {
       id: Date.now(),
       role: 'user',
       content: messageContent,
       created_at: new Date().toISOString(),
+      image_url: imageFile ? URL.createObjectURL(imageFile) : undefined,
     };
     setMessages((prev) => [...prev, tempUserMsg]);
 
@@ -890,8 +895,22 @@ export default function Chat() {
                   dispatch_reason: msg.dispatch_reason,
                 };
 
-                // Keep existing messages (including temp user msg) and add assistant
-                setMessages((prev) => [...prev, assistantMsg]);
+                // Replace temp user message with real one (has server image_url), then add assistant
+                setMessages((prev) => {
+                  const withoutTemp = prev.filter((m) => m.id !== tempUserMsg.id);
+                  const realUser: Message | undefined = event.userMessage
+                    ? {
+                        id: event.userMessage.id,
+                        role: 'user',
+                        content: event.userMessage.content,
+                        image_url: event.userMessage.image_url ?? undefined,
+                        created_at: event.userMessage.created_at,
+                      }
+                    : undefined;
+                  return realUser
+                    ? [...withoutTemp, realUser, assistantMsg]
+                    : [...withoutTemp, assistantMsg];
+                });
 
                 // Store thinking data for this assistant message, auto-collapsed
                 setCurrentThinking((prev) => {
@@ -1136,6 +1155,11 @@ export default function Chat() {
 
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
+        {!user && (
+          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+            訪客模式 — 您的對話紀錄存放在公共空間。<a href="/login" className="underline font-medium ml-1">登入</a>以使用個人對話。
+          </div>
+        )}
         {/* Chat header */}
         <div className="flex items-center gap-3 px-3 lg:px-4 py-3 border-b border-gray-200 bg-white">
           <button
@@ -1194,9 +1218,20 @@ export default function Chat() {
                       {msg.role === 'user' ? (
                         <div className="flex justify-end">
                           <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-indigo-600 text-white rounded-br-md">
-                            <div className="whitespace-pre-wrap break-words">
-                              {msg.content}
-                            </div>
+                            {msg.image_url && (
+                              <div className="mb-2">
+                                <img
+                                  src={msg.image_url}
+                                  alt="上傳的圖片"
+                                  className="max-w-full rounded-lg max-h-64 object-contain"
+                                />
+                              </div>
+                            )}
+                            {msg.content && msg.content !== '🖼️ [圖片]' && (
+                              <div className="whitespace-pre-wrap break-words">
+                                {msg.content}
+                              </div>
+                            )}
                             <div className="text-xs mt-1.5 text-indigo-200">
                               {formatTime(msg.created_at)}
                             </div>

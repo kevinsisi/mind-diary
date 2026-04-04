@@ -2,8 +2,12 @@ import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { generateReflection } from "../ai/geminiClient.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
+
+// All diary routes require authentication (guests get 401)
+router.use(requireAuth);
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -59,10 +63,10 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     const stmt = sqlite.prepare(`
-      INSERT INTO diary_entries (title, content, mood, folder_id)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO diary_entries (title, content, mood, folder_id, user_id)
+      VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(title, content, mood || null, folder_id || null);
+    const result = stmt.run(title, content, mood || null, folder_id || null, req.userId);
     const entryId = result.lastInsertRowid as number;
 
     // Index in FTS5
@@ -95,8 +99,8 @@ router.get("/", (req: Request, res: Response) => {
     let countSql = "SELECT COUNT(DISTINCT d.id) as count FROM diary_entries d";
     let querySql = "SELECT DISTINCT d.id, d.title, d.content, d.mood, d.ai_reflection, d.ai_agents, d.folder_id, d.created_at, d.updated_at FROM diary_entries d";
     const joins: string[] = [];
-    const conditions: string[] = [];
-    const params: any[] = [];
+    const conditions: string[] = ["d.user_id = ?"];
+    const params: any[] = [req.userId];
 
     if (tagFilter) {
       joins.push("JOIN diary_entry_tags dt ON dt.diary_id = d.id JOIN tags t ON t.id = dt.tag_id");
@@ -110,7 +114,7 @@ router.get("/", (req: Request, res: Response) => {
     }
 
     const joinStr = joins.length > 0 ? " " + joins.join(" ") : "";
-    const whereStr = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
+    const whereStr = " WHERE " + conditions.join(" AND ");
 
     const total = sqlite
       .prepare(countSql + joinStr + whereStr)
@@ -147,8 +151,8 @@ router.get("/", (req: Request, res: Response) => {
 router.get("/:id", (req: Request, res: Response) => {
   try {
     const entry = sqlite
-      .prepare("SELECT * FROM diary_entries WHERE id = ?")
-      .get(Number(req.params.id)) as any;
+      .prepare("SELECT * FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(Number(req.params.id), req.userId) as any;
 
     if (!entry) {
       return res.status(404).json({ error: "日記不存在" });
@@ -173,8 +177,8 @@ router.put("/:id", (req: Request, res: Response) => {
     const id = Number(req.params.id);
 
     const existing = sqlite
-      .prepare("SELECT * FROM diary_entries WHERE id = ?")
-      .get(id) as any;
+      .prepare("SELECT * FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(id, req.userId) as any;
 
     if (!existing) {
       return res.status(404).json({ error: "日記不存在" });
@@ -187,9 +191,9 @@ router.put("/:id", (req: Request, res: Response) => {
 
     sqlite
       .prepare(
-        `UPDATE diary_entries SET title = ?, content = ?, mood = ?, folder_id = ?, updated_at = datetime('now') WHERE id = ?`
+        `UPDATE diary_entries SET title = ?, content = ?, mood = ?, folder_id = ?, updated_at = datetime('now') WHERE id = ? AND user_id = ?`
       )
-      .run(newTitle, newContent, newMood, newFolderId, id);
+      .run(newTitle, newContent, newMood, newFolderId, id, req.userId);
 
     // Update FTS5 entry (delete + re-insert)
     sqlite.prepare("DELETE FROM diary_fts WHERE rowid = ?").run(id);
@@ -221,8 +225,8 @@ router.delete("/:id", (req: Request, res: Response) => {
     const id = Number(req.params.id);
 
     const existing = sqlite
-      .prepare("SELECT id FROM diary_entries WHERE id = ?")
-      .get(id);
+      .prepare("SELECT id FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(id, req.userId);
 
     if (!existing) {
       return res.status(404).json({ error: "日記不存在" });
@@ -255,8 +259,8 @@ router.delete("/:id", (req: Request, res: Response) => {
 router.post("/:id/reflect", async (req: Request, res: Response) => {
   try {
     const entry = sqlite
-      .prepare("SELECT * FROM diary_entries WHERE id = ?")
-      .get(Number(req.params.id)) as any;
+      .prepare("SELECT * FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(Number(req.params.id), req.userId) as any;
 
     if (!entry) {
       return res.status(404).json({ error: "日記不存在" });
@@ -278,7 +282,7 @@ router.post("/:id/reflect", async (req: Request, res: Response) => {
 // POST /api/diary/:id/analyze — run multi-agent analysis with SSE streaming
 router.post("/:id/analyze", async (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const entry = sqlite.prepare("SELECT * FROM diary_entries WHERE id = ?").get(id) as any;
+  const entry = sqlite.prepare("SELECT * FROM diary_entries WHERE id = ? AND user_id = ?").get(id, req.userId) as any;
   if (!entry) return res.status(404).json({ error: "日記不存在" });
 
   // SSE headers — disable all buffering

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BookOpen, Search, MessageCircle, Sparkles, Tag, BarChart3, Loader2, FileText } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 interface RecentEntry {
   id: number;
@@ -68,6 +69,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [entries, setEntries] = useState<RecentEntry[]>([]);
   const [tags, setTags] = useState<TagItem[]>([]);
@@ -145,6 +147,11 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-4xl">
+      {!user && (
+        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+          您目前以訪客身份瀏覽，資料為公共空間。<a href="/login" className="underline font-medium ml-1">登入</a>以存取個人資料。
+        </div>
+      )}
       {/* Search Bar — top of page */}
       <div className="mb-6">
         <div className="flex items-center gap-3 bg-white rounded-xl shadow-md px-5 py-3.5 ring-1 ring-gray-200 focus-within:ring-2 focus-within:ring-indigo-400 transition-shadow">

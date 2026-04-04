@@ -1,17 +1,29 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
+import path from "node:path";
+import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { AGENTS, AgentPersona } from "../ai/agents.js";
 import { trackUsageByKey } from "../ai/keyPool.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { analyzeImage } from "../ai/geminiClient.js";
-import { selectAgents } from "../ai/diaryAnalyzer.js";
-import { IntentResult } from "../ai/intentAnalyzer.js";
+import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
+import { IMAGES_DIR } from "./diaryImages.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// ── Multer for chat image uploads (memory storage, not persisted) ────
+// ── Multer for chat image uploads (disk storage, served as static) ───
+const CHAT_IMAGES_DIR = path.join(IMAGES_DIR, "chat");
+fs.mkdirSync(CHAT_IMAGES_DIR, { recursive: true });
+
 const chatImageUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, CHAT_IMAGES_DIR),
+    filename: (_req, file, cb) => {
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const ext = path.extname(file.originalname).toLowerCase() || ".jpg";
+      cb(null, `${unique}${ext}`);
+    },
+  }),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (_req, file, cb) => {
     const allowed = ["image/png", "image/jpeg", "image/gif", "image/webp"];
@@ -374,12 +386,16 @@ router.post(
     };
 
     try {
-      // 1. Save user message
+      // 1. Save user message (with image_url if uploaded)
+      const imageUrl = req.file
+        ? `/images/chat/${path.basename(req.file.path)}`
+        : null;
+
       sqlite
         .prepare(
-          "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'user', ?)"
+          "INSERT INTO chat_messages (session_id, role, content, image_url) VALUES (?, 'user', ?, ?)"
         )
-        .run(sessionId, content);
+        .run(sessionId, content, imageUrl);
 
       // Update session title to first message content (truncated) if it's the first message
       const msgCount = (
@@ -446,12 +462,13 @@ router.post(
       if (req.file) {
         sendEvent({ type: "phase", phase: "analyzing-image", message: "分析圖片中..." });
         try {
+          const imgBuffer = fs.readFileSync(req.file.path);
           const imgTimeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("image analysis timeout")), 60000)
           );
           const imgResult = await Promise.race([
             analyzeImage(
-              req.file.buffer,
+              imgBuffer,
               req.file.mimetype,
               "請詳細描述這張圖片的內容，包括主要元素、色彩、文字、情境等所有細節。"
             ),
@@ -481,43 +498,39 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
 
-      // 4. Select agents via keyword matching (instant, no API call)
-      sendEvent({ type: "phase", phase: "analyzing", message: "分析意圖中..." });
+      // 4. AI-based agent selection with reasoning
+      sendEvent({ type: "phase", phase: "analyzing", message: "AI 分析訊息，選擇最適合的好友..." });
 
-      const keywordAgents = selectAgents(`${content} ${contextStr}`, 3);
-      const intentResult: IntentResult = {
-        agents: keywordAgents.map((a) => ({
-          id: a.id,
-          reason: `與${a.role}相關`,
-        })),
-        summary: `根據你的訊息，我請了${keywordAgents.map((a) => a.name).join("和")}來聊聊`,
-      };
+      const selectionInput = contextStr
+        ? `使用者訊息：${content}\n\n相關背景資料：\n${contextStr}`
+        : `使用者訊息：${content}`;
 
-      // Build reasons map for the intent event
+      const { selections, summary: selectionSummary } = await selectAgentsWithAI(selectionInput, 3);
+
+      // Build intent data from AI selections
       const reasonsMap: Record<string, string> = {};
-      for (const a of intentResult.agents) {
-        reasonsMap[a.id] = a.reason;
+      for (const s of selections) {
+        reasonsMap[s.agent.id] = s.reason;
       }
 
       sendEvent({
         type: "intent",
-        agents: intentResult.agents.map((a) => {
-          const agent = AGENTS[a.id];
-          return {
-            id: a.id,
-            name: agent?.name || a.id,
-            emoji: agent?.emoji || "🤖",
-            role: agent?.role || "",
-            reason: a.reason,
-          };
-        }),
+        agents: selections.map((s) => ({
+          id: s.agent.id,
+          name: s.agent.name,
+          emoji: s.agent.emoji,
+          role: s.agent.role,
+          reason: s.reason,
+        })),
         reasons: reasonsMap,
-        summary: intentResult.summary,
+        summary: selectionSummary,
       });
 
-      const selectedAgents = intentResult.agents
-        .map((a) => AGENTS[a.id])
-        .filter((a): a is AgentPersona => !!a);
+      const selectedAgents = selections.map((s) => s.agent);
+      const intentResult = {
+        agents: selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
+        summary: selectionSummary,
+      };
 
       sendEvent({
         type: "phase",
@@ -603,9 +616,19 @@ router.post(
         created_at: string;
       };
 
-      // 8. Stream complete event
+      // 8. Also fetch the saved user message to get its DB id (replaces temp)
+      const userMessage = sqlite
+        .prepare(
+          "SELECT id, role, content, image_url, created_at FROM chat_messages WHERE session_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1"
+        )
+        .get(sessionId) as { id: number; role: string; content: string; image_url: string | null; created_at: string } | undefined;
+
+      // 9. Stream complete event
       sendEvent({
         type: "complete",
+        userMessage: userMessage
+          ? { id: userMessage.id, role: userMessage.role, content: userMessage.content, image_url: userMessage.image_url, created_at: userMessage.created_at }
+          : undefined,
         message: {
           id: assistantMessage.id,
           role: assistantMessage.role,
@@ -643,7 +666,7 @@ router.get("/sessions/:id/messages", (req: Request, res: Response) => {
 
     const messages = sqlite
       .prepare(
-        "SELECT id, session_id, role, content, ai_agents, dispatch_reason, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC"
+        "SELECT id, session_id, role, content, image_url, ai_agents, dispatch_reason, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC"
       )
       .all(sessionId);
 
