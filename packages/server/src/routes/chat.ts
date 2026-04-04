@@ -446,11 +446,17 @@ router.post(
       if (req.file) {
         sendEvent({ type: "phase", phase: "analyzing-image", message: "分析圖片中..." });
         try {
-          const imgResult = await analyzeImage(
-            req.file.buffer,
-            req.file.mimetype,
-            "請詳細描述這張圖片的內容，包括主要元素、色彩、文字、情境等所有細節。"
+          const imgTimeout = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("image analysis timeout")), 60000)
           );
+          const imgResult = await Promise.race([
+            analyzeImage(
+              req.file.buffer,
+              req.file.mimetype,
+              "請詳細描述這張圖片的內容，包括主要元素、色彩、文字、情境等所有細節。"
+            ),
+            imgTimeout,
+          ]);
           contextParts.unshift(`[使用者上傳的圖片分析]\n${imgResult.text}`);
         } catch (imgErr) {
           console.error("[chat] Image analysis failed:", imgErr);
