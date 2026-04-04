@@ -28,13 +28,35 @@ export function selectAgents(text: string, maxAgents: number = 4): AgentPersona[
     return { agent, score };
   });
 
-  const selected = scored.filter(s => s.score > 0 || s.agent.id === 'xiaoyu');
-  if (selected.length <= 1) {
-    const azhe = Object.values(AGENTS).find(a => a.id === 'azhe')!;
-    if (!selected.find(s => s.agent.id === 'azhe')) selected.push({ agent: azhe, score: 0 });
+  // Filter to agents that matched at least one keyword
+  const matched = scored.filter(s => s.score > 0);
+
+  if (matched.length > 0) {
+    // Return matched agents sorted by score, capped at maxAgents
+    return matched.sort((a, b) => b.score - a.score).slice(0, maxAgents).map(s => s.agent);
   }
 
-  return selected.sort((a, b) => b.score - a.score).slice(0, maxAgents).map(s => s.agent);
+  // No keyword matches — pick a smart default based on message content
+  const questionWords = ['想知道', '要不要', '該不該', '怎麼', '如何', '可以', '好不好'];
+  const emotionWords = ['心情', '情緒', '難過', '開心', '哭', '累', '煩', '怕', '崩潰', '心累', '受不了', '撐不住', '不想'];
+  const relationshipWords = ['關係', '感情', '家人', '朋友', '伴侶', '相處', '溝通'];
+  const healthWords = ['健康', '身體', '痛', '不舒服', '生病', '醫生', '睡眠'];
+
+  if (emotionWords.some(w => lower.includes(w))) {
+    return [AGENTS['xiaoyu']];
+  }
+  if (relationshipWords.some(w => lower.includes(w))) {
+    return [AGENTS['xinxin']];
+  }
+  if (healthWords.some(w => lower.includes(w))) {
+    return [AGENTS['dran']];
+  }
+  if (questionWords.some(w => lower.includes(w))) {
+    return [AGENTS['azhe']];
+  }
+
+  // Truly generic fallback — single general advisor
+  return [AGENTS['azhe']];
 }
 
 // Run a single agent analysis
