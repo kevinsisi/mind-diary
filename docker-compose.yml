@@ -1,6 +1,6 @@
 services:
   mind-diary:
-    build: .
+    image: kevin950805/mind-diary:latest
     container_name: mind-diary
     restart: unless-stopped
     ports:
