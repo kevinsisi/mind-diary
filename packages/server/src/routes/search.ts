@@ -85,6 +85,34 @@ router.get("/", (req: Request, res: Response) => {
       // FTS match can fail on syntax errors; skip
     }
 
+    // Fallback: LIKE search on diary title + content (catches Chinese phrases FTS5 misses)
+    try {
+      const likeResults = sqlite
+        .prepare(
+          `SELECT
+            d.id,
+            'diary' as source,
+            d.title,
+            SUBSTR(d.content, 1, 100) as snippet,
+            d.created_at,
+            0 as rank
+          FROM diary_entries d
+          WHERE (d.title LIKE ? OR d.content LIKE ?)
+          ORDER BY d.created_at DESC`
+        )
+        .all(`%${q}%`, `%${q}%`) as SearchResult[];
+
+      for (const r of likeResults) {
+        if (!foundDiaryIds.has(r.id)) {
+          r.tags = getEntryTags(r.id);
+          foundDiaryIds.add(r.id);
+          results.push(r);
+        }
+      }
+    } catch {
+      // skip
+    }
+
     // Search diary by tag name (LIKE match)
     try {
       const tagResults = sqlite
