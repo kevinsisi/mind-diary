@@ -61,7 +61,11 @@ ${agent.systemPrompt}
     const geminiModel = genai.getGenerativeModel({
       model: modelName,
       systemInstruction: chatSystemPrompt,
-      generationConfig: { maxOutputTokens: 300 },
+      generationConfig: {
+        maxOutputTokens: 300,
+        // @ts-ignore — disable thinking for fast responses
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     const streamResult = await geminiModel.generateContentStream(prompt);
@@ -146,7 +150,11 @@ async function synthesizeChat(
     const model = genai.getGenerativeModel({
       model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
       systemInstruction: MASTER_CHAT_PROMPT,
-      generationConfig: { maxOutputTokens: 1024 },
+      generationConfig: {
+        maxOutputTokens: 1024,
+        // @ts-ignore — disable thinking for fast responses
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     let prompt = `使用者訊息：${userMessage}\n\n`;
