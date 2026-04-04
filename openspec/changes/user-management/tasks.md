@@ -1,25 +1,25 @@
 ## 1. 基礎建設（Dependencies & DB Schema）
 
-- [ ] 1.1 安裝後端依賴：`jsonwebtoken`、`@types/jsonwebtoken`、`bcryptjs`、`@types/bcryptjs`、`cookie-parser`、`@types/cookie-parser`
-- [ ] 1.2 新增 `users` 表到 `packages/server/src/db/schema.ts`（id, username, password_hash, role, created_at）
-- [ ] 1.3 修改 `files` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
-- [ ] 1.4 修改 `diary_entries` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
-- [ ] 1.5 修改 `chat_sessions` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
-- [ ] 1.6 建立 Drizzle migration：`0001_add_users_table.sql`（建立 users 表 + 插入預設 admin）
-- [ ] 1.7 建立 Drizzle migration：`0002_add_user_id_columns.sql`（ALTER TABLE 加 user_id DEFAULT 1）
-- [ ] 1.8 確認 `packages/server/src/db/index.ts` 在啟動時自動執行 migrations
+- [x] 1.1 安裝後端依賴：`jsonwebtoken`、`@types/jsonwebtoken`、`bcryptjs`、`@types/bcryptjs`、`cookie-parser`、`@types/cookie-parser`
+- [x] 1.2 新增 `users` 表到 `packages/server/src/db/schema.ts`（id, username, password_hash, role, created_at）
+- [x] 1.3 修改 `files` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
+- [x] 1.4 修改 `diary_entries` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
+- [x] 1.5 修改 `chat_sessions` schema，加入 `user_id INTEGER NOT NULL DEFAULT 1`
+- [x] 1.6 建立 Drizzle migration：`0001_add_users_table.sql`（建立 users 表 + 插入預設 admin）
+- [x] 1.7 建立 Drizzle migration：`0002_add_user_id_columns.sql`（ALTER TABLE 加 user_id DEFAULT 1）
+- [x] 1.8 確認 `packages/server/src/db/index.ts` 在啟動時自動執行 migrations
 
 ## 2. 後端認證層（Auth Middleware & Routes）
 
-- [ ] 2.1 建立 `packages/server/src/middleware/auth.ts`：`requireAuth` middleware（驗證 JWT cookie，查 DB 確認使用者存在）
-- [ ] 2.2 在 `auth.ts` middleware 新增 `optionalAuth`（無 token 時 `req.userId = 0, req.userRole = 'guest'`）
-- [ ] 2.3 建立 `packages/server/src/middleware/requireAdmin.ts`：admin-only middleware
-- [ ] 2.4 建立 `packages/server/src/routes/auth.ts`：`POST /api/auth/login`（bcryptjs 驗證，設 httpOnly cookie）
-- [ ] 2.5 新增 `POST /api/auth/logout`（清除 cookie）
-- [ ] 2.6 新增 `GET /api/auth/me`（回傳當前使用者資訊）
-- [ ] 2.7 新增 `PATCH /api/auth/password`（使用者修改自己密碼，需舊密碼驗證）
-- [ ] 2.8 建立 `packages/server/src/routes/users.ts`：Admin CRUD（GET/POST/DELETE /api/users, PATCH /api/users/:id/password）
-- [ ] 2.9 在 `packages/server/src/index.ts` 掛載 `cookie-parser`，註冊 auth 和 users 路由
+- [x] 2.1 建立 `packages/server/src/middleware/auth.ts`：`requireAuth` middleware（驗證 JWT cookie，查 DB 確認使用者存在）
+- [x] 2.2 在 `auth.ts` middleware 新增 `optionalAuth`（無 token 時 `req.userId = 0, req.userRole = 'guest'`）
+- [x] 2.3 建立 `packages/server/src/middleware/requireAdmin.ts`：admin-only middleware
+- [x] 2.4 建立 `packages/server/src/routes/auth.ts`：`POST /api/auth/login`（bcryptjs 驗證，設 httpOnly cookie）
+- [x] 2.5 新增 `POST /api/auth/logout`（清除 cookie）
+- [x] 2.6 新增 `GET /api/auth/me`（回傳當前使用者資訊）
+- [x] 2.7 新增 `PATCH /api/auth/password`（使用者修改自己密碼，需舊密碼驗證）
+- [x] 2.8 建立 `packages/server/src/routes/users.ts`：Admin CRUD（GET/POST/DELETE /api/users, PATCH /api/users/:id/password）
+- [x] 2.9 在 `packages/server/src/index.ts` 掛載 `cookie-parser`，註冊 auth 和 users 路由
 
 ## 3. 後端資料隔離（現有路由加 user_id filter）
 
@@ -32,7 +32,7 @@
 
 ## 4. 初始化：自動建立 Admin 帳號
 
-- [ ] 4.1 在 `packages/server/src/index.ts` 啟動時檢查 users 表是否為空，若空則讀取 `ADMIN_USERNAME`/`ADMIN_PASSWORD` env 建立 admin（id=1），並 log 警告若使用預設密碼
+- [x] 4.1 在 `packages/server/src/index.ts` 啟動時檢查 users 表是否為空，若空則讀取 `ADMIN_USERNAME`/`ADMIN_PASSWORD` env 建立 admin（id=1），並 log 警告若使用預設密碼
 
 ## 5. 前端：AuthContext 與路由保護
 
@@ -63,9 +63,9 @@
 
 ## 9. 環境變數與 Docker 設定
 
-- [ ] 9.1 新增 `JWT_SECRET` 環境變數到 `docker-compose.yml`（`packages/server/src/` 中讀取）
-- [ ] 9.2 新增 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 環境變數到 `docker-compose.yml`（有預設值）
-- [ ] 9.3 更新 `packages/server/src/index.ts` 讀取 `JWT_SECRET`（確保 production 安全）
+- [x] 9.1 新增 `JWT_SECRET` 環境變數到 `docker-compose.yml`（`packages/server/src/` 中讀取）
+- [x] 9.2 新增 `ADMIN_USERNAME`、`ADMIN_PASSWORD` 環境變數到 `docker-compose.yml`（有預設值）
+- [x] 9.3 更新 `packages/server/src/index.ts` 讀取 `JWT_SECRET`（確保 production 安全）
 
 ## 10. 測試與部署驗收
 

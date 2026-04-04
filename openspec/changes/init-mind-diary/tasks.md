@@ -71,4 +71,4 @@
 - [x] 7.3 更新 Caddy config：diary.sisihome.org + diary.sisihome（含 flush_interval -1 for SSE）
 - [x] 7.4 更新 CLAUDE.md URL routing table
 - [ ] 7.5 端到端驗證：API key 配額恢復後全功能測試
-- [ ] 7.6 圖片/附件上傳整合到日記（日記內嵌圖片 + AI 分析）
+- [x] 7.6 圖片/附件上傳整合到日記（日記內嵌圖片 + AI 分析）
