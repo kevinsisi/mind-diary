@@ -202,7 +202,7 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
-  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 1024, 5, "chat-master");
+  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 4096, 5, "chat-master");
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
@@ -405,7 +405,7 @@ router.post(
         )
         .run(sessionId, content, imageUrl);
 
-      // Update session title to first message content (truncated) if it's the first message
+      // Update session title with AI-generated title if it's the first message
       const msgCount = (
         sqlite
           .prepare(
@@ -414,11 +414,31 @@ router.post(
           .get(sessionId) as { count: number }
       ).count;
 
+      // Generate AI title asynchronously (don't block SSE stream)
       if (msgCount === 1) {
-        const truncatedTitle = content.slice(0, 20) + (content.length > 20 ? "..." : "");
-        sqlite
-          .prepare("UPDATE chat_sessions SET title = ? WHERE id = ?")
-          .run(truncatedTitle, sessionId);
+        (async () => {
+          try {
+            const aiTitle = await callGeminiWithRetry(
+              '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。只回傳標題本身。',
+              content.slice(0, 500),
+              200,
+              2,
+              'chat-title',
+            );
+            const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
+            if (cleanTitle) {
+              sqlite
+                .prepare("UPDATE chat_sessions SET title = ? WHERE id = ?")
+                .run(cleanTitle, sessionId);
+              sseWrite(res, { type: 'title-updated', sessionId, title: cleanTitle });
+            }
+          } catch {
+            // Fallback: use truncated content
+            const fallback = content.slice(0, 20) + (content.length > 20 ? '...' : '');
+            sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallback, sessionId);
+            sseWrite(res, { type: 'title-updated', sessionId, title: fallback });
+          }
+        })();
       }
 
       // 2. Search FTS5 for relevant context

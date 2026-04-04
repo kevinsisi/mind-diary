@@ -52,7 +52,7 @@ interface DiaryEntry {
 }
 
 interface AnalysisEvent {
-  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'done' | 'error' | 'tags' | 'complete';
+  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'done' | 'error' | 'tags' | 'complete' | 'intent';
   phase?: string;
   message?: string;
   agentId?: string;
@@ -62,8 +62,10 @@ interface AnalysisEvent {
   content?: string;
   tags?: string[];
   reflection?: string;
-  agents?: Array<{ id: string; name: string; emoji: string; role: string }>;
+  agents?: Array<{ id: string; name: string; emoji: string; role: string; reason?: string }>;
   agentResults?: AgentResult[];
+  reasons?: Record<string, string>;
+  summary?: string;
 }
 
 interface FolderItem {
@@ -263,6 +265,10 @@ export default function Diary() {
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
 
+  // Inline title editing (view mode)
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+
   // Image upload (edit mode)
   const [pendingImages, setPendingImages] = useState<File[]>([]);
   const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
@@ -279,6 +285,8 @@ export default function Diary() {
   const [analysisPhase, setAnalysisPhase] = useState('');
   const [activeAgents, setActiveAgents] = useState<Array<{ id: string; name: string; emoji: string; role: string }>>([]);
   const [agentThinking, setAgentThinking] = useState<Record<string, { name: string; emoji: string; role: string; text: string; done: boolean }>>({});
+  const [agentReasons, setAgentReasons] = useState<Record<string, string>>({});
+  const [dispatchSummary, setDispatchSummary] = useState('');
   const [synthesisText, setSynthesisText] = useState('');
   const [showThinking, setShowThinking] = useState(false);
 
@@ -481,6 +489,21 @@ export default function Diary() {
     }
   }
 
+  async function handleSaveTitle() {
+    if (!selectedEntry || !titleDraft.trim()) {
+      setEditingTitle(false);
+      return;
+    }
+    try {
+      const updated = await apiClient.put<DiaryEntry>(`/api/diary/${selectedEntry.id}`, { title: titleDraft.trim() });
+      setSelectedEntry(prev => prev ? { ...prev, title: updated.title } : prev);
+      setEntries(prev => prev.map(e => e.id === selectedEntry.id ? { ...e, title: updated.title } : e));
+    } catch {
+      // silent
+    }
+    setEditingTitle(false);
+  }
+
   async function handleAnalyze(entry?: DiaryEntry) {
     const target = entry || selectedEntry;
     if (!target) return;
@@ -489,6 +512,8 @@ export default function Diary() {
     setAnalysisPhase('');
     setActiveAgents([]);
     setAgentThinking({});
+    setAgentReasons({});
+    setDispatchSummary('');
     setSynthesisText('');
 
     try {
@@ -516,7 +541,18 @@ export default function Diary() {
           try {
             const event: AnalysisEvent = JSON.parse(line.slice(6));
 
-            if (event.type === 'phase' && event.agents) {
+            if (event.type === 'intent') {
+              setDispatchSummary(event.summary || '');
+              setAgentReasons(event.reasons || {});
+              // Pre-populate agent cards from intent
+              if (event.agents) {
+                const prePopulated: Record<string, { name: string; emoji: string; role: string; text: string; done: boolean }> = {};
+                for (const a of event.agents) {
+                  prePopulated[a.id] = { name: a.name, emoji: a.emoji, role: a.role, text: '', done: false };
+                }
+                setAgentThinking(prev => ({ ...prePopulated, ...prev }));
+              }
+            } else if (event.type === 'phase' && event.agents) {
               setActiveAgents(event.agents);
               setAnalysisPhase(event.message || '');
             } else if (event.type === 'phase') {
@@ -542,14 +578,21 @@ export default function Diary() {
             } else if (event.type === 'synthesizing' && event.content) {
               setSynthesisText(prev => prev + event.content);
             } else if (event.type === 'complete') {
-              const updated: DiaryEntry = {
-                ...target,
+              setSelectedEntry(prev => {
+                const base = prev || target;
+                return {
+                  ...base,
+                  ai_reflection: event.reflection || null,
+                  ai_agents: event.agentResults || null,
+                  tags: event.tags || base.tags,
+                };
+              });
+              setEntries(prev => prev.map(e => e.id === target.id ? {
+                ...e,
                 ai_reflection: event.reflection || null,
                 ai_agents: event.agentResults || null,
-                tags: event.tags || target.tags,
-              };
-              setSelectedEntry(updated);
-              setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+                tags: event.tags || e.tags,
+              } : e));
               fetchTags();
             }
           } catch { /* skip malformed */ }
@@ -565,10 +608,14 @@ export default function Diary() {
   async function handleCreateFolder() {
     if (!newFolderName.trim()) return;
     try {
-      await apiClient.post('/api/folders', { name: newFolderName.trim() });
+      const created = await apiClient.post<FolderItem>('/api/folders', { name: newFolderName.trim() });
       setNewFolderName('');
       setShowNewFolder(false);
-      fetchFolders();
+      await fetchFolders();
+      // Auto-select newly created folder if in edit mode
+      if (editMode) {
+        setEditFolderId(created.id);
+      }
     } catch {
       // silent
     }
@@ -913,23 +960,60 @@ export default function Diary() {
                 </div>
               </div>
 
-              {/* Folder */}
+              {/* Folder / Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">資料夾</label>
-                <select
-                  value={editFolderId ?? ''}
-                  onChange={(e) =>
-                    setEditFolderId(e.target.value ? Number(e.target.value) : null)
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-white"
-                >
-                  <option value="">未分類</option>
-                  {folders.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.icon} {f.name}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">分類</label>
+                <div className="flex gap-2">
+                  <select
+                    value={editFolderId ?? ''}
+                    onChange={(e) =>
+                      setEditFolderId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-white"
+                  >
+                    <option value="">未分類</option>
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.icon} {f.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewFolder(true)}
+                    className="px-3 py-2 text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-gray-300 rounded-lg transition-colors whitespace-nowrap"
+                    title="新增分類"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+                {showNewFolder && (
+                  <div className="flex items-center gap-1 mt-2">
+                    <input
+                      autoFocus
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={async (e) => {
+                        if (e.key === 'Enter') { await handleCreateFolder(); }
+                        if (e.key === 'Escape') setShowNewFolder(false);
+                      }}
+                      placeholder="新分類名稱"
+                      className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                    />
+                    <button
+                      onClick={handleCreateFolder}
+                      className="p-1.5 text-indigo-600 hover:text-indigo-800"
+                    >
+                      <Save size={14} />
+                    </button>
+                    <button
+                      onClick={() => setShowNewFolder(false)}
+                      className="p-1.5 text-gray-400 hover:text-gray-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Tags */}
@@ -1063,13 +1147,33 @@ export default function Diary() {
           <div className="flex flex-col h-full">
             {/* View header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-gray-900 truncate">{selectedEntry.title}</h3>
-                  {selectedEntry.mood && (
-                    <span className="text-xl">{MOOD_MAP[selectedEntry.mood] ?? selectedEntry.mood}</span>
-                  )}
-                </div>
+              <div className="min-w-0 flex-1 mr-2">
+                {editingTitle ? (
+                  <input
+                    autoFocus
+                    value={titleDraft}
+                    onChange={e => setTitleDraft(e.target.value)}
+                    onBlur={handleSaveTitle}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleSaveTitle();
+                      if (e.key === 'Escape') setEditingTitle(false);
+                    }}
+                    className="w-full font-semibold text-gray-900 bg-transparent border-b border-indigo-400 focus:outline-none text-base"
+                  />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <h3
+                      className="font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 transition-colors"
+                      title="點擊編輯標題"
+                      onClick={() => { setTitleDraft(selectedEntry.title); setEditingTitle(true); }}
+                    >
+                      {selectedEntry.title}
+                    </h3>
+                    {selectedEntry.mood && (
+                      <span className="text-xl">{MOOD_MAP[selectedEntry.mood] ?? selectedEntry.mood}</span>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs text-gray-400 mt-0.5">
                   {formatDateTime(selectedEntry.created_at)}
                 </p>
@@ -1155,12 +1259,18 @@ export default function Diary() {
                     {analysisPhase && (
                       <div className="text-xs text-indigo-500 font-medium">{analysisPhase}</div>
                     )}
+                    {dispatchSummary && (
+                      <div className="text-xs text-gray-500 italic px-1">{dispatchSummary}</div>
+                    )}
                     {Object.entries(agentThinking).map(([id, agent]) => (
                       <div key={id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
                         <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
                           <span>{agent.emoji}</span>
                           <span className="text-sm font-medium text-gray-900">{agent.name}</span>
                           <span className="text-xs text-gray-400">{agent.role}</span>
+                          {agentReasons[id] && (
+                            <span className="text-[10px] text-gray-400 italic ml-1">— {agentReasons[id]}</span>
+                          )}
                           {!agent.done && analyzing && <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />}
                           {agent.done && <span className="text-xs text-green-500 ml-auto">✓</span>}
                         </div>
@@ -1225,7 +1335,7 @@ export default function Diary() {
                           <span className="text-xs text-gray-400">{agent.role}</span>
                           <span className="text-xs text-green-500 ml-auto">✓</span>
                         </div>
-                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line">
+                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto">
                           {agent.result}
                         </div>
                       </div>

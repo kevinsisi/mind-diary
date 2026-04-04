@@ -4,7 +4,7 @@ import { assignBatchKeys, trackUsageByKey } from './keyPool.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface AnalysisEvent {
-  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'done' | 'error' | 'tags';
+  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'done' | 'error' | 'tags' | 'intent';
   phase?: string;
   message?: string;
   agentId?: string;
@@ -14,7 +14,9 @@ export interface AnalysisEvent {
   content?: string;
   tags?: string[];
   reflection?: string;
-  agents?: Array<{ id: string; name: string; emoji: string; role: string }>;
+  agents?: Array<{ id: string; name: string; emoji: string; role: string; reason?: string }>;
+  reasons?: Record<string, string>;
+  summary?: string;
 }
 
 export type OnEvent = (event: AnalysisEvent) => void;
@@ -130,7 +132,7 @@ async function runAgent(
     const geminiModel = genai.getGenerativeModel({
       model: modelName,
       systemInstruction: agent.systemPrompt,
-      generationConfig: { maxOutputTokens: 512 },
+      generationConfig: { maxOutputTokens: 2048 },
     });
 
     const result = await geminiModel.generateContentStream(prompt);
@@ -187,7 +189,7 @@ async function synthesize(
     const model = genai.getGenerativeModel({
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction: MASTER_AGENT_PROMPT,
-      generationConfig: { maxOutputTokens: 1024 },
+      generationConfig: { maxOutputTokens: 4096 },
     });
 
     const prompt = `日記標題：${title}\n\n日記內容：${content}\n\n以下是各位好友的分析：\n\n${analysisBlock}`;
@@ -239,8 +241,18 @@ export async function analyzeDiary(
 ): Promise<{ reflection: string; tags: string[]; agentResults: Array<{ agentId: string; name: string; emoji: string; role: string; result: string }> }> {
   // Phase 1: AI-based agent selection
   onEvent({ type: 'phase', phase: 'analyzing', message: 'AI 分析日記內容，選擇最適合的好友...' });
-  const { selections } = await selectAgentsWithAI(`日記標題：${title}\n\n日記內容：${content.slice(0, 1000)}`, 4);
+  const { selections, summary: selectionSummary } = await selectAgentsWithAI(`日記標題：${title}\n\n日記內容：${content.slice(0, 1000)}`, 4);
   const selectedAgents = selections.map(s => s.agent);
+
+  // Emit intent event with agent reasons (like chat)
+  const reasonsMap: Record<string, string> = {};
+  for (const s of selections) reasonsMap[s.agent.id] = s.reason;
+  onEvent({
+    type: 'intent',
+    agents: selections.map(s => ({ id: s.agent.id, name: s.agent.name, emoji: s.agent.emoji, role: s.agent.role, reason: s.reason })),
+    reasons: reasonsMap,
+    summary: selectionSummary,
+  });
 
   onEvent({
     type: 'phase',

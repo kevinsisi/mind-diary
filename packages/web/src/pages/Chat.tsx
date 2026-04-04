@@ -63,7 +63,9 @@ interface ThinkingData {
 }
 
 interface ChatSSEEvent {
-  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'complete' | 'error' | 'intent';
+  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'complete' | 'error' | 'intent' | 'title-updated';
+  sessionId?: number;
+  title?: string;
   phase?: string;
   message?: string | { id: number; role: string; content: string; created_at: string; ai_agents?: string; dispatch_reason?: string };
   userMessage?: { id: number; role: string; content: string; image_url?: string; created_at: string };
@@ -388,6 +390,7 @@ function SessionItem({
   onMoveStart,
   onMoveEnd,
   onMoveTo,
+  onRenameTitle,
   formatTime,
 }: {
   session: Session;
@@ -400,12 +403,46 @@ function SessionItem({
   onMoveStart: () => void;
   onMoveEnd: () => void;
   onMoveTo: (folderId: number | null) => void;
+  onRenameTitle: (newTitle: string) => void;
   formatTime: (dateStr: string) => string;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  function startEdit(e: React.MouseEvent) {
+    e.stopPropagation();
+    setDraft(session.title || '');
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    const trimmed = draft.trim();
+    if (trimmed && trimmed !== session.title) {
+      onRenameTitle(trimmed);
+    }
+    setEditing(false);
+  }
+
   return (
     <div className={`relative ${indented ? 'ml-4' : ''}`}>
+      {editing ? (
+        <div className="px-3 py-2">
+          <input
+            autoFocus
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={e => {
+              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Escape') setEditing(false);
+            }}
+            className="w-full text-xs font-medium bg-white border border-indigo-400 rounded px-1.5 py-1 focus:outline-none"
+          />
+        </div>
+      ) : (
       <button
         onClick={onSelect}
+        onDoubleClick={startEdit}
         className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors group flex items-center justify-between gap-1.5 ${
           isActive
             ? 'bg-indigo-100 text-indigo-800'
@@ -426,6 +463,13 @@ function SessionItem({
           </div>
         </div>
         <div className="flex items-center gap-0.5 flex-shrink-0">
+          <button
+            onClick={startEdit}
+            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-gray-200 text-gray-400 hover:text-gray-600 transition-all"
+            title="重命名"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
           {folders.length > 0 && (
             <button
               onClick={(e) => { e.stopPropagation(); onMoveStart(); }}
@@ -444,6 +488,7 @@ function SessionItem({
           </button>
         </div>
       </button>
+      )}
 
       {/* Move-to-folder dropdown */}
       {isMoving && (
@@ -694,6 +739,15 @@ export default function Chat() {
       );
     } catch (err) {
       console.error('Failed to delete folder:', err);
+    }
+  };
+
+  const renameSession = async (sessionId: number, newTitle: string) => {
+    try {
+      await apiClient.put(`/api/chat/sessions/${sessionId}`, { title: newTitle });
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, title: newTitle } : s));
+    } catch (err) {
+      console.error('Failed to rename session:', err);
     }
   };
 
@@ -991,8 +1045,10 @@ export default function Chat() {
                 });
               }
 
-              // Refresh sessions to update title/lastMessage
+              // Refresh sessions to update lastMessage (title may update via title-updated)
               loadSessions();
+            } else if (event.type === 'title-updated' && event.sessionId && event.title) {
+              setSessions(prev => prev.map(s => s.id === event.sessionId ? { ...s, title: event.title! } : s));
             } else if (event.type === 'error') {
               console.error('SSE error:', event.message);
               setCurrentThinking(null);
@@ -1168,6 +1224,7 @@ export default function Chat() {
                       onMoveStart={() => setMovingSessionId(session.id)}
                       onMoveEnd={() => setMovingSessionId(null)}
                       onMoveTo={(fid) => moveSessionToFolder(session.id, fid)}
+                      onRenameTitle={(t) => renameSession(session.id, t)}
                       formatTime={formatTime}
                     />
                   ))}
@@ -1196,6 +1253,7 @@ export default function Chat() {
                     onMoveStart={() => setMovingSessionId(session.id)}
                     onMoveEnd={() => setMovingSessionId(null)}
                     onMoveTo={(fid) => moveSessionToFolder(session.id, fid)}
+                    onRenameTitle={(t) => renameSession(session.id, t)}
                     formatTime={formatTime}
                   />
                 ))}
