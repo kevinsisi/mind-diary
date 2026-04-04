@@ -606,10 +606,9 @@ router.post(
             const aiTitle = await callGeminiWithRetry(
               '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
               titleContext,
-              200,
+              2048,
               2,
               'chat-title',
-              true, // disableThinking: prevents thinking tokens from consuming the output budget
             );
             const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
             console.log('[chat-title] Generated:', JSON.stringify(cleanTitle), '| raw length:', aiTitle.length);
