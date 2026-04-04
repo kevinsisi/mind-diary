@@ -3,6 +3,7 @@ import { sqlite } from "../db/connection.js";
 import { AGENTS, AgentPersona } from "../ai/agents.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
+import { selectAgents } from "../ai/diaryAnalyzer.js";
 import { analyzeIntent, IntentResult } from "../ai/intentAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
@@ -457,29 +458,35 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
 
-      // 4. AI intent analysis to select agents
+      // 4. Select agents — keyword matching first (instant), then try AI enhancement
       sendEvent({ type: "phase", phase: "analyzing", message: "分析意圖中..." });
 
-      const availableAgentList = Object.values(AGENTS).map((a) => ({
-        id: a.id,
-        name: a.name,
-        emoji: a.emoji,
-        role: a.role,
-        description: a.description,
-      }));
+      // Step 1: Instant keyword-based selection (zero latency)
+      const keywordAgents = selectAgents(`${content} ${contextStr}`, 3);
+      let intentResult: IntentResult = {
+        agents: keywordAgents.map((a) => ({
+          id: a.id,
+          reason: `與${a.role}相關`,
+        })),
+        summary: `根據你的訊息，我請了${keywordAgents.map((a) => a.name).join("和")}來聊聊`,
+      };
 
-      let intentResult: IntentResult;
+      // Step 2: Try AI intent analysis (10s timeout, non-blocking enhancement)
       try {
-        intentResult = await analyzeIntent(content, historyStr, availableAgentList);
-      } catch (err) {
-        console.warn("[chat] Intent analysis failed, using defaults:", err);
-        intentResult = {
-          agents: [
-            { id: "xiaoyu", reason: "提供情緒支持和共感回應" },
-            { id: "azhe", reason: "提供理性分析和建議" },
-          ],
-          summary: "根據你的訊息，我請了小語和阿哲來聊聊",
-        };
+        const availableAgentList = Object.values(AGENTS).map((a) => ({
+          id: a.id,
+          name: a.name,
+          emoji: a.emoji,
+          role: a.role,
+          description: a.description,
+        }));
+        const aiResult = await analyzeIntent(content, historyStr, availableAgentList);
+        // AI succeeded — use its richer reasons and selection
+        if (aiResult.agents.length > 0) {
+          intentResult = aiResult;
+        }
+      } catch {
+        // AI failed or timed out — keyword selection already in place
       }
 
       // Build reasons map for the intent event
