@@ -170,5 +170,36 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE chat_messages ADD COLUMN image_url TEXT");
   }
 
+  // ── Users table ─────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
+  // ── Add user_id to all content tables (DEFAULT 0 = legacy/guest) ─
+  const tableUserIdPatches: Array<{ table: string; defaultVal?: number }> = [
+    { table: "diary_entries" },
+    { table: "files" },
+    { table: "chat_sessions" },
+    { table: "diary_images" },
+  ];
+  for (const { table } of tableUserIdPatches) {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as any[];
+    if (!cols.some((c: any) => c.name === "user_id")) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0`);
+    }
+  }
+
+  // chat_messages: add user_id derived from session owner (not independently set)
+  const chatMsgColsCheck = db.prepare("PRAGMA table_info(chat_messages)").all() as any[];
+  if (!chatMsgColsCheck.some((c: any) => c.name === "user_id")) {
+    db.exec("ALTER TABLE chat_messages ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0");
+  }
+
   console.log("[migrate] All tables and FTS indexes created.");
 }
