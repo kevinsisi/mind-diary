@@ -65,14 +65,16 @@ export async function selectAgentsWithAI(
   try {
     const raw = await withGeminiRetry(async (apiKey) => {
       const genai = new GoogleGenerativeAI(apiKey);
-      // Use gemini-2.0-flash (non-thinking) for structured JSON output.
-      // Thinking models (gemini-2.5-flash) truncate output and break responseMimeType.
+      // Use gemini-2.5-flash with thinkingBudget:0 for structured JSON output.
+      // thinkingBudget:0 disables the thinking step so JSON output is never truncated.
       const model = genai.getGenerativeModel({
-        model: 'gemini-2.0-flash',
+        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
         systemInstruction: systemPrompt,
         generationConfig: {
-          maxOutputTokens: 1024,
+          maxOutputTokens: 512,
           responseMimeType: 'application/json',
+          // @ts-ignore — thinkingBudget:0 disables thinking to prevent output truncation
+          thinkingConfig: { thinkingBudget: 0 },
         },
       });
       const timeout = new Promise<never>((_, reject) =>
