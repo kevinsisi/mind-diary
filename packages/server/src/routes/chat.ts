@@ -12,9 +12,15 @@ const router = Router();
 // ── SSE helpers ──────────────────────────────────────────────────────
 
 function sseWrite(res: Response, event: Record<string, any>): void {
-  res.write(`data: ${JSON.stringify(event)}\n\n`);
-  if (typeof (res as any).flush === "function") {
-    (res as any).flush();
+  try {
+    if (!res.writableEnded) {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (typeof (res as any).flush === "function") {
+        (res as any).flush();
+      }
+    }
+  } catch {
+    // Connection closed — ignore
   }
 }
 
@@ -63,7 +69,6 @@ ${agent.systemPrompt}
     generationConfig: { maxOutputTokens: 300 },
   });
 
-  console.log(`[chat-agent] ${agent.id} calling generateContent with key ...${apiKey.slice(-6)}`);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Gemini API timeout (15s)")), 15000)
   );
@@ -72,7 +77,6 @@ ${agent.systemPrompt}
     timeoutPromise,
   ]);
   fullText = response.response.text();
-  console.log(`[chat-agent] ${agent.id} got response: ${fullText.slice(0, 50)}...`);
 
   // Send the full result as a single "thinking" event
   if (fullText) {
@@ -163,7 +167,6 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
 
-  console.log(`[chat-synth] calling generateContent with key ...${apiKey.slice(-6)}`);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("Synthesis timeout (20s)")), 20000)
   );
@@ -172,7 +175,6 @@ async function synthesizeChat(
     timeoutPromise,
   ]);
   const fullText = response.response.text();
-  console.log(`[chat-synth] got response: ${fullText.slice(0, 50)}...`);
   onEvent({ type: "synthesizing", content: fullText });
 
   const usage = response.response.usageMetadata;
@@ -530,14 +532,9 @@ router.post(
       });
 
       const agentResults = await Promise.all(agentPromises);
-      console.log(`[chat] All agents done. Results: ${agentResults.length}, aborted: ${aborted}`);
 
-      if (aborted) {
-        clearInterval(heartbeat);
-        return;
-      }
-
-      // 6. Master synthesis
+      // Always continue to synthesis + save, even if client disconnected
+      // (so the response is stored in DB for next page load)
       sendEvent({
         type: "phase",
         phase: "synthesizing",
@@ -552,11 +549,6 @@ router.post(
         sendEvent,
         synthesisKey
       );
-
-      if (aborted) {
-        clearInterval(heartbeat);
-        return;
-      }
 
       // 7. Save assistant message with ai_agents and dispatch_reason
       const aiAgentsJson = JSON.stringify(
