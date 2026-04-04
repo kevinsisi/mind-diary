@@ -530,6 +530,7 @@ router.post(
       });
 
       const agentResults = await Promise.all(agentPromises);
+      console.log(`[chat] All agents done. Results: ${agentResults.length}, aborted: ${aborted}`);
 
       if (aborted) {
         clearInterval(heartbeat);
