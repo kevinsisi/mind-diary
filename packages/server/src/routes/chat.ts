@@ -54,43 +54,36 @@ ${agent.systemPrompt}
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   let fullText = "";
 
-  // Use withStreamRetry for automatic key rotation on 429
-  const { withStreamRetry } = await import("../ai/geminiRetry.js");
-  await withStreamRetry(async (apiKey) => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const geminiModel = genai.getGenerativeModel({
-      model: modelName,
-      systemInstruction: chatSystemPrompt,
-      generationConfig: {
-        maxOutputTokens: 300,
-        // @ts-ignore — disable thinking for fast responses
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    });
+  // Use the batch-assigned key directly (no retry loop — faster, avoids hanging on bad keys)
+  const apiKey = _apiKey;
+  const genai = new GoogleGenerativeAI(apiKey);
+  const geminiModel = genai.getGenerativeModel({
+    model: modelName,
+    systemInstruction: chatSystemPrompt,
+    generationConfig: { maxOutputTokens: 300 },
+  });
 
-    const streamResult = await geminiModel.generateContentStream(prompt);
-    fullText = "";
+  const streamResult = await geminiModel.generateContentStream(prompt);
 
-    for await (const chunk of streamResult.stream) {
-      const text = chunk.text();
-      if (text) {
-        fullText += text;
-        onEvent({
-          type: "agent-thinking",
-          agentId: agent.id,
-          agentName: agent.name,
-          agentEmoji: agent.emoji,
-          content: text,
-        });
-      }
+  for await (const chunk of streamResult.stream) {
+    const text = chunk.text();
+    if (text) {
+      fullText += text;
+      onEvent({
+        type: "agent-thinking",
+        agentId: agent.id,
+        agentName: agent.name,
+        agentEmoji: agent.emoji,
+        content: text,
+      });
     }
+  }
 
-    const response = await streamResult.response;
-    const usage = response.usageMetadata;
-    if (usage) {
-      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
-    }
-  }, { maxRetries: 3 });
+  const response = await streamResult.response;
+  const usage = response.usageMetadata;
+  if (usage) {
+    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
+  }
 
   onEvent({
     type: "agent-done",
