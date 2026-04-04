@@ -1,10 +1,9 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
-import { AGENTS, AgentPersona } from "../ai/agents.js";
-import { withGeminiRetry } from "../ai/geminiRetry.js";
+import { AGENTS } from "../ai/agents.js";
 import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
 import { selectAgents } from "../ai/diaryAnalyzer.js";
-import { analyzeIntent, IntentResult } from "../ai/intentAnalyzer.js";
+import { IntentResult } from "../ai/intentAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = Router();
@@ -24,6 +23,60 @@ function sseWrite(res: Response, event: Record<string, any>): void {
   }
 }
 
+
+// ── Gemini call with key rotation + 15s timeout ─────────────────────
+
+async function callGeminiWithRetry(
+  systemPrompt: string,
+  prompt: string,
+  maxTokens: number,
+  maxAttempts: number = 3,
+): Promise<string> {
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const keys = assignBatchKeys(maxAttempts);
+  let lastError: unknown;
+
+  for (let i = 0; i < Math.min(maxAttempts, keys.length); i++) {
+    const apiKey = keys[i];
+    try {
+      const genai = new GoogleGenerativeAI(apiKey);
+      const model = genai.getGenerativeModel({
+        model: modelName,
+        systemInstruction: systemPrompt,
+        generationConfig: { maxOutputTokens: maxTokens },
+      });
+
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("timeout")), 15000)
+      );
+      const response = await Promise.race([
+        model.generateContent(prompt),
+        timeout,
+      ]);
+      const text = response.response.text();
+
+      const usage = response.response.usageMetadata;
+      if (usage) {
+        trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat");
+      }
+      return text;
+    } catch (err: any) {
+      lastError = err;
+      const msg = err?.message || "";
+      // Block suspended keys permanently
+      if (msg.includes("suspended")) {
+        const { markKeyBad } = await import("../ai/keyPool.js");
+        markKeyBad(apiKey, "403 suspended");
+      }
+      // Continue to next key for 429/timeout/suspended
+      if (msg.includes("429") || msg.includes("timeout") || msg.includes("suspended") || msg.includes("403")) {
+        continue;
+      }
+      throw err; // Unknown errors — don't retry
+    }
+  }
+  throw lastError || new Error("All keys exhausted");
+}
 
 // ── Run a single agent in chat mode ──────────────────────────────────
 
@@ -57,26 +110,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  let fullText = "";
-
-  // Use non-streaming API (generateContentStream hangs on gemini-2.5-flash)
-  const apiKey = _apiKey;
-  const genai = new GoogleGenerativeAI(apiKey);
-  const geminiModel = genai.getGenerativeModel({
-    model: modelName,
-    systemInstruction: chatSystemPrompt,
-    generationConfig: { maxOutputTokens: 300 },
-  });
-
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Gemini API timeout (15s)")), 15000)
-  );
-  const response = await Promise.race([
-    geminiModel.generateContent(prompt),
-    timeoutPromise,
-  ]);
-  fullText = response.response.text();
+  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 300);
 
   // Send the full result as a single "thinking" event
   if (fullText) {
@@ -130,7 +164,6 @@ async function synthesizeChat(
   contextStr: string,
   historyStr: string,
   onEvent: (event: Record<string, any>) => void,
-  synthesisKey?: string
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
 
@@ -148,40 +181,14 @@ async function synthesizeChat(
     })
     .join("、");
 
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const apiKey = synthesisKey || assignBatchKeys(1)[0];
-  const genai = new GoogleGenerativeAI(apiKey);
-  const model = genai.getGenerativeModel({
-    model: modelName,
-    systemInstruction: MASTER_CHAT_PROMPT,
-    generationConfig: { maxOutputTokens: 1024 },
-  });
-
   let prompt = `使用者訊息：${userMessage}\n\n`;
-  if (contextStr) {
-    prompt += `【相關資料】\n${contextStr}\n\n`;
-  }
-  if (historyStr) {
-    prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
-  }
+  if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
+  if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
 
-  const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Synthesis timeout (20s)")), 20000)
-  );
-  const response = await Promise.race([
-    model.generateContent(prompt),
-    timeoutPromise,
-  ]);
-  const fullText = response.response.text();
+  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 1024);
   onEvent({ type: "synthesizing", content: fullText });
-
-  const usage = response.response.usageMetadata;
-  if (usage) {
-    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-master");
-  }
-
   return fullText;
 }
 
@@ -506,17 +513,14 @@ router.post(
         })),
       });
 
-      // 5. Run agents in parallel with batch keys (+1 for synthesis)
-      const keys = assignBatchKeys(selectedAgents.length + 1);
-      const synthesisKey = keys[keys.length - 1];
-      const agentPromises = selectedAgents.map((agent, i) => {
-        const key = keys[i % keys.length];
+      // 5. Run agents in parallel (callGeminiWithRetry handles keys internally)
+      const agentPromises = selectedAgents.map((agent) => {
         return runChatAgent(
           agent,
           content,
           contextStr,
           historyStr,
-          key,
+          "",
           sendEvent
         ).catch((err) => {
           console.error(`[chat] Agent ${agent.id} failed:`, err);
@@ -547,7 +551,6 @@ router.post(
         contextStr,
         historyStr,
         sendEvent,
-        synthesisKey
       );
 
       // 7. Save assistant message with ai_agents and dispatch_reason
