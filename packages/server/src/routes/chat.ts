@@ -63,8 +63,10 @@ ${agent.systemPrompt}
     generationConfig: { maxOutputTokens: 300 },
   });
 
+  console.log(`[chat-agent] ${agent.id} calling generateContent with key ...${apiKey.slice(-6)}`);
   const response = await geminiModel.generateContent(prompt);
   fullText = response.response.text();
+  console.log(`[chat-agent] ${agent.id} got response: ${fullText.slice(0, 50)}...`);
 
   // Send the full result as a single "thinking" event
   if (fullText) {
