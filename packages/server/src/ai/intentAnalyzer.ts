@@ -12,6 +12,14 @@ export interface IntentResult {
   summary: string;
 }
 
+// Timeout wrapper — resolve with null if the promise takes too long
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 export async function analyzeIntent(
   message: string,
   history: string,
@@ -43,45 +51,52 @@ ${agentList}
 
   const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-  const result = await withGeminiRetry(async (apiKey) => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: modelName,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        maxOutputTokens: 256,
-        responseMimeType: 'application/json',
-      },
-    });
-
-    let prompt = `使用者訊息：${message}`;
-    if (history) {
-      prompt += `\n\n最近對話紀錄：\n${history}`;
-    }
-
-    const response = await model.generateContent(prompt);
-    const text = response.response.text();
-
-    const usage = response.response.usageMetadata;
-    if (usage) {
-      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'chat-intent');
-    }
-
-    return text;
-  });
-
   try {
+    const result = await withTimeout(
+      withGeminiRetry(async (apiKey) => {
+        const genai = new GoogleGenerativeAI(apiKey);
+        const model = genai.getGenerativeModel({
+          model: modelName,
+          systemInstruction: systemPrompt,
+          generationConfig: {
+            maxOutputTokens: 256,
+            responseMimeType: 'application/json',
+            // @ts-ignore — limit thinking budget for 2.5 models
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        });
+
+        let prompt = `使用者訊息：${message}`;
+        if (history) {
+          prompt += `\n\n最近對話紀錄：\n${history}`;
+        }
+
+        const response = await model.generateContent(prompt);
+        const text = response.response.text();
+
+        const usage = response.response.usageMetadata;
+        if (usage) {
+          trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, 'chat-intent');
+        }
+
+        return text;
+      }),
+      10000 // 10 second timeout
+    );
+
+    if (result === null) {
+      console.warn('[intentAnalyzer] Timed out after 10s, using defaults');
+      return getDefaultIntent(availableAgents);
+    }
+
     const parsed = JSON.parse(result) as IntentResult;
 
-    // Validate and ensure we have at least 2 agents
     if (!parsed.agents || parsed.agents.length === 0) {
       return getDefaultIntent(availableAgents);
     }
 
-    // Cap at 3 agents
     parsed.agents = parsed.agents.slice(0, 3);
 
-    // Validate agent IDs exist
     const validIds = new Set(availableAgents.map(a => a.id));
     parsed.agents = parsed.agents.filter(a => validIds.has(a.id));
 
@@ -98,8 +113,8 @@ ${agentList}
     }
 
     return parsed;
-  } catch {
-    console.warn('[intentAnalyzer] Failed to parse Gemini response, using defaults');
+  } catch (err) {
+    console.warn('[intentAnalyzer] Failed:', err);
     return getDefaultIntent(availableAgents);
   }
 }
