@@ -64,7 +64,13 @@ ${agent.systemPrompt}
   });
 
   console.log(`[chat-agent] ${agent.id} calling generateContent with key ...${apiKey.slice(-6)}`);
-  const response = await geminiModel.generateContent(prompt);
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Gemini API timeout (15s)")), 15000)
+  );
+  const response = await Promise.race([
+    geminiModel.generateContent(prompt),
+    timeoutPromise,
+  ]);
   fullText = response.response.text();
   console.log(`[chat-agent] ${agent.id} got response: ${fullText.slice(0, 50)}...`);
 
