@@ -83,7 +83,15 @@ export async function selectAgentsWithAI(
       return res.response.text();
     });
 
-    const parsed = JSON.parse(raw);
+    // Strip markdown code block wrapper if Gemini returns ```json...``` instead of raw JSON
+    let cleaned = raw.trim();
+    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      cleaned = jsonMatch[1].trim();
+    }
+    console.log('[selectAgentsWithAI] raw response length:', raw.length, '| starts with:', raw.slice(0, 50));
+
+    const parsed = JSON.parse(cleaned);
     const selections: AgentSelection[] = [];
 
     for (const item of parsed.selected || []) {
@@ -101,6 +109,7 @@ export async function selectAgentsWithAI(
     };
   } catch (err) {
     // Error fallback: pick xiaoyu + azhe as universal defaults
+    console.error('[selectAgentsWithAI] FALLBACK triggered — reason:', (err as Error).message);
     const xiaoyu = AGENTS['xiaoyu'];
     const azhe = AGENTS['azhe'];
     return {
