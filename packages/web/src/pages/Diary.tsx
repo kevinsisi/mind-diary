@@ -294,6 +294,22 @@ export default function Diary() {
   const [showThinking, setShowThinking] = useState(false);
 
   const listRef = useRef<HTMLDivElement>(null);
+  const analysisAbortRef = useRef<AbortController | null>(null);
+  const analyzingRef = useRef(false);
+
+  useEffect(() => { analyzingRef.current = analyzing; }, [analyzing]);
+
+  // Visibilitychange: abort SSE when returning to foreground, then reload entry from DB
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && analysisAbortRef.current) {
+        analysisAbortRef.current.abort();
+        // finally block in handleAnalyze will reload the entry
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // ── Fetchers ───────────────────────────────────────────────────
 
@@ -519,10 +535,15 @@ export default function Diary() {
     setDispatchSummary('');
     setSynthesisText('');
 
+    const abortCtrl = new AbortController();
+    analysisAbortRef.current = abortCtrl;
+    let gotComplete = false;
+
     try {
       const response = await fetch(`/api/diary/${target.id}/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: abortCtrl.signal,
       });
 
       const reader = response.body?.getReader();
@@ -581,6 +602,7 @@ export default function Diary() {
             } else if (event.type === 'synthesizing' && event.content) {
               setSynthesisText(prev => prev + event.content);
             } else if (event.type === 'complete') {
+              gotComplete = true;
               setSelectedEntry(prev => {
                 const base = prev || target;
                 return {
@@ -601,9 +623,25 @@ export default function Diary() {
           } catch { /* skip malformed */ }
         }
       }
-    } catch {
-      // silent
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        // silent on real errors
+      }
+      // AbortError: backend still processing, will reload in finally
     } finally {
+      analysisAbortRef.current = null;
+      // If SSE ended without complete (abort / connection drop), reload entry from DB
+      // Backend continues processing and saves result even after client disconnects
+      if (!gotComplete) {
+        try {
+          const fresh = await apiClient.get<DiaryEntry>(`/api/diary/${target.id}`);
+          if (fresh?.ai_reflection) {
+            setSelectedEntry(prev => prev?.id === target.id ? { ...prev, ...fresh } : prev);
+            setEntries(prev => prev.map(e => e.id === target.id ? fresh : e));
+            fetchTags();
+          }
+        } catch { /* ignore */ }
+      }
       setAnalyzing(false);
     }
   }

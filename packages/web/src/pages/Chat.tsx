@@ -545,6 +545,15 @@ export default function Chat() {
   const [newFolderName, setNewFolderName] = useState('');
   const [movingSessionId, setMovingSessionId] = useState<number | null>(null);
 
+  // SSE reconnect refs
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeSessionIdRef = useRef<number | null>(null);
+  const sendingMessageRef = useRef(false);
+
+  // Keep refs in sync
+  useEffect(() => { activeSessionIdRef.current = activeSessionId; }, [activeSessionId]);
+  useEffect(() => { sendingMessageRef.current = sendingMessage; }, [sendingMessage]);
+
   // Thinking state for current streaming message
   const [currentThinking, setCurrentThinking] = useState<ThinkingData | null>(null);
   // Stored thinking data keyed by the assistant message id that follows it
@@ -679,6 +688,19 @@ export default function Chat() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentThinking]);
+
+  // ── SSE reconnect on page visibility change (mobile background) ─
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && abortControllerRef.current) {
+        // Page returned to foreground while SSE was active → abort SSE
+        // The finally block in sendMessage will reload from DB
+        abortControllerRef.current.abort();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
 
   // ── Create new session ──────────────────────────────────────────
 
@@ -871,6 +893,11 @@ export default function Chat() {
     };
     setCurrentThinking(thinking);
 
+    // AbortController for SSE — allows aborting when page goes to background
+    const abortCtrl = new AbortController();
+    abortControllerRef.current = abortCtrl;
+    let gotComplete = false;
+
     try {
       let response: Response;
       if (imageFile) {
@@ -880,12 +907,14 @@ export default function Chat() {
         response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
           method: 'POST',
           body: fd,
+          signal: abortCtrl.signal,
         });
       } else {
         response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ content }),
+          signal: abortCtrl.signal,
         });
       }
 
@@ -986,6 +1015,7 @@ export default function Chat() {
                 return { ...prev, synthesisText: prev.synthesisText + event.content };
               });
             } else if (event.type === 'complete') {
+              gotComplete = true;
               // Extract the assistant message from the event
               const msg = event.message;
               if (msg && typeof msg === 'object' && 'id' in msg) {
@@ -1059,13 +1089,29 @@ export default function Chat() {
           }
         }
       }
-    } catch (err) {
-      console.error('Failed to send message:', err);
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
-      setCurrentThinking(null);
-      setInput(messageContent !== '🖼️ [圖片]' ? messageContent : ''); // restore input
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // SSE was aborted (page went to background) — backend still processing
+        // Do NOT restore input; we'll reload from DB in finally
+      } else {
+        console.error('Failed to send message:', err);
+        // Remove optimistic message on real error
+        setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+        setCurrentThinking(null);
+        setInput(messageContent !== '🖼️ [圖片]' ? messageContent : ''); // restore input
+      }
     } finally {
+      abortControllerRef.current = null;
+      // If SSE ended without a complete event (connection drop / abort), reload from DB
+      // Backend continues processing and saves the result even after client disconnects
+      if (!gotComplete && activeSessionId) {
+        try {
+          await loadMessages(activeSessionId);
+        } catch {
+          // ignore reload errors
+        }
+      }
+      setCurrentThinking(null);
       setSendingMessage(false);
       inputRef.current?.focus();
     }

@@ -72,7 +72,13 @@ export async function selectAgentsWithAI(
           responseMimeType: 'application/json',
         },
       });
-      const res = await model.generateContent(text.slice(0, 2000)); // cap context length
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('agent selection timeout')), 10000)
+      );
+      const res = await Promise.race([
+        model.generateContent(text.slice(0, 2000)), // cap context length
+        timeout,
+      ]);
       return res.response.text();
     });
 
