@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
-import { generateReflection } from "../ai/geminiClient.js";
+import { generateReflection, generateText } from "../ai/geminiClient.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -58,15 +58,29 @@ router.post("/", async (req: Request, res: Response) => {
   try {
     const { title, content, mood, folder_id } = req.body;
 
-    if (!title || !content) {
-      return res.status(400).json({ error: "標題和內容為必填" });
+    if (!content) {
+      return res.status(400).json({ error: "內容為必填" });
+    }
+
+    // Auto-generate title with AI if not provided
+    let finalTitle = (title || '').trim();
+    if (!finalTitle) {
+      try {
+        const generated = await generateText(
+          `根據以下日記內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）：\n\n${content}`,
+          { maxTokens: 30 }
+        );
+        finalTitle = generated.text.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim();
+      } catch {
+        finalTitle = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' }) + ' 的日記';
+      }
     }
 
     const stmt = sqlite.prepare(`
       INSERT INTO diary_entries (title, content, mood, folder_id, user_id)
       VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(title, content, mood || null, folder_id || null, req.userId);
+    const result = stmt.run(finalTitle, content, mood || null, folder_id || null, req.userId);
     const entryId = result.lastInsertRowid as number;
 
     // Index in FTS5
@@ -74,7 +88,7 @@ router.post("/", async (req: Request, res: Response) => {
       .prepare(
         `INSERT INTO diary_fts (rowid, title, content) VALUES (?, ?, ?)`
       )
-      .run(entryId, title, content);
+      .run(entryId, finalTitle, content);
 
     const entry = sqlite
       .prepare("SELECT * FROM diary_entries WHERE id = ?")

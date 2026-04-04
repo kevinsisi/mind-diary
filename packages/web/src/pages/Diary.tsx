@@ -425,7 +425,7 @@ export default function Diary() {
   }
 
   async function handleSave() {
-    if (!editTitle.trim() || !editContent.trim()) return;
+    if (!editContent.trim()) return;
     setSaving(true);
     try {
       if (isNew) {
@@ -858,7 +858,7 @@ export default function Diary() {
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving || !editTitle.trim() || !editContent.trim()}
+                  disabled={saving || !editContent.trim()}
                   className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
                 >
                   {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -875,7 +875,7 @@ export default function Diary() {
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder="為這篇日記取個標題..."
+                  placeholder="留空讓 AI 自動生成標題"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                 />
               </div>
@@ -1376,7 +1376,7 @@ export default function Diary() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={saving || !editTitle.trim() || !editContent.trim()}
+                disabled={saving || !editContent.trim()}
                 className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white text-sm font-medium rounded-lg disabled:opacity-50"
               >
                 {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
