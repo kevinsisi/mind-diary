@@ -65,35 +65,28 @@ export async function selectAgentsWithAI(
   try {
     const raw = await withGeminiRetry(async (apiKey) => {
       const genai = new GoogleGenerativeAI(apiKey);
+      // Use gemini-2.0-flash (non-thinking) for structured JSON output.
+      // Thinking models (gemini-2.5-flash) truncate output and break responseMimeType.
       const model = genai.getGenerativeModel({
-        model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash',
         systemInstruction: systemPrompt,
         generationConfig: {
-          maxOutputTokens: 512,
-          // NOTE: do NOT use responseMimeType: 'application/json' with gemini-2.5-flash (thinking model)
-          // — it causes truncated responses (body stops at `{\n  "selected": [`).
-          // Parse JSON from plain text response instead.
+          maxOutputTokens: 1024,
+          responseMimeType: 'application/json',
         },
       });
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('agent selection timeout')), 25000)
       );
       const res = await Promise.race([
-        model.generateContent(text.slice(0, 2000)), // cap context length
+        model.generateContent(text.slice(0, 2000)),
         timeout,
       ]);
       return res.response.text();
     });
 
-    // Strip markdown code block wrapper if Gemini returns ```json...``` instead of raw JSON
-    let cleaned = raw.trim();
-    const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      cleaned = jsonMatch[1].trim();
-    }
-    console.log('[selectAgentsWithAI] raw response length:', raw.length, '| starts with:', raw.slice(0, 50));
-
-    const parsed = JSON.parse(cleaned);
+    console.log('[selectAgentsWithAI] raw response length:', raw.length, '| starts with:', raw.slice(0, 80));
+    const parsed = JSON.parse(raw.trim());
     const selections: AgentSelection[] = [];
 
     for (const item of parsed.selected || []) {
