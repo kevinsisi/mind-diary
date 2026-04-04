@@ -33,7 +33,7 @@ function buildSelectionPrompt(maxAgents: number): string {
     .map(a => `- ${a.id}（${a.name}，${a.role}）：${a.description}`)
     .join('\n');
 
-  return `你是「心靈日記」的 AI 好友調度員。根據使用者的訊息或日記內容，選出最適合的好友來回應。
+  return `你是「心靈日記」的 AI 好友調度員。根據使用者的訊息或日記內容，從 ${Object.keys(AGENTS).length} 位好友中選出最適合的好友來回應。
 
 好友列表：
 ${agentList}
@@ -41,17 +41,18 @@ ${agentList}
 請以 JSON 格式回傳（只能回傳 JSON，不能有其他文字）：
 {
   "selected": [
-    { "id": "agent_id", "reason": "選擇這位好友的具體原因（1-2句話）" }
+    { "id": "agent_id", "reason": "選擇這位好友的具體原因（1-2句話，說明訊息中哪些內容讓你選了她/他）" }
   ],
-  "summary": "用溫暖的語氣告訴使用者，你為什麼請了這些好友，以及他們能幫什麼"
+  "summary": "用2-3句話說明你的派遣推理：你分析了哪些好友的專長、這個問題的核心需求是什麼、最終選了誰以及他們能從哪個角度幫助使用者（要提到具體好友名字）"
 }
 
 規則：
-- 最多選 ${maxAgents} 位，最少 1 位
-- 根據訊息的主要主題、情境、需求來選擇
+- 通常選 2-3 位，最多選 ${maxAgents} 位，至少選 2 位
+- 根據訊息的主要主題、情境、需求來選擇最相關的好友
 - reason 要說明訊息中哪些內容讓你選了這位好友
-- summary 是給使用者看的，要自然、溫暖、繁體中文
-- 如果訊息很一般或不明確，選最相關的 1-2 位即可`;
+- summary 是派遣推理摘要，要讓使用者理解為什麼這些好友最適合，繁體中文
+- 不同面向的問題（如感情 + 地點建議）要選能互補的好友
+- 即使問題簡短，也要從不同角度挑選 2-3 位好友回應`;
 }
 
 // Use Gemini AI to select the most appropriate agents
@@ -73,7 +74,7 @@ export async function selectAgentsWithAI(
         },
       });
       const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('agent selection timeout')), 10000)
+        setTimeout(() => reject(new Error('agent selection timeout')), 25000)
       );
       const res = await Promise.race([
         model.generateContent(text.slice(0, 2000)), // cap context length
@@ -99,11 +100,15 @@ export async function selectAgentsWithAI(
       summary: parsed.summary || `我請了${selections.map(s => s.agent.name).join('和')}來為你回應`,
     };
   } catch (err) {
-    // Error fallback: pick xiaoyu (emotional support) as universal default
-    const fallback = AGENTS['xiaoyu'];
+    // Error fallback: pick xiaoyu + azhe as universal defaults
+    const xiaoyu = AGENTS['xiaoyu'];
+    const azhe = AGENTS['azhe'];
     return {
-      selections: [{ agent: fallback, reason: '作為你的心靈夥伴陪你聊聊' }],
-      summary: `讓${fallback.name}來陪你聊聊吧`,
+      selections: [
+        { agent: xiaoyu, reason: '作為你的心靈夥伴，從情感角度陪你聊聊' },
+        { agent: azhe, reason: '提供務實的建議和不同視角' },
+      ],
+      summary: `我請了${xiaoyu.name}和${azhe.name}來幫你，分別從心靈支持和務實建議兩個角度回應你的問題`,
     };
   }
 }

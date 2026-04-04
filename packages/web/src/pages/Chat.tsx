@@ -202,10 +202,16 @@ function ThinkingCard({
             </div>
           )}
 
-          {/* Dispatch summary */}
+          {/* Dispatch summary — 派遣中心 */}
           {thinking.dispatchSummary && (
-            <div className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500 italic">
-              {thinking.dispatchSummary}
+            <div className="px-3 py-2.5 border-b border-indigo-100 bg-indigo-50/60">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-xs">🎯</span>
+                <span className="text-xs font-semibold text-indigo-700">派遣中心</span>
+              </div>
+              <div className="text-xs text-indigo-800 leading-relaxed">
+                {thinking.dispatchSummary}
+              </div>
             </div>
           )}
 
@@ -338,10 +344,16 @@ function AssistantMessage({
     return (
       <div className="flex justify-start">
         <div className="max-w-full lg:max-w-3xl w-full space-y-2">
-          {/* Dispatch reason */}
+          {/* Dispatch reason — 派遣中心 */}
           {msg.dispatch_reason && (
-            <div className="text-xs text-gray-400 px-1 py-1 leading-relaxed">
-              {msg.dispatch_reason}
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 mb-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-xs">🎯</span>
+                <span className="text-xs font-semibold text-indigo-700">派遣中心</span>
+              </div>
+              <div className="text-xs text-indigo-800 leading-relaxed">
+                {msg.dispatch_reason}
+              </div>
             </div>
           )}
 

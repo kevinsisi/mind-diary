@@ -128,7 +128,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 300, 5, "chat-agent");
+  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 1000, 5, "chat-agent");
 
   // Send the full result as a single "thinking" event
   if (fullText) {
