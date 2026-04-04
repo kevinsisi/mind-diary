@@ -27,24 +27,26 @@ function classifyError(err: unknown): ClassifiedError {
   // Also check for status codes in error objects
   const status = (err as any)?.status ?? (err as any)?.httpStatusCode ?? 0;
 
+  // Check auth/suspended FIRST (403 errors contain URL with "generatecontent" which has "rate")
+  if (
+    status === 401 ||
+    status === 403 ||
+    combined.includes("api_key_invalid") ||
+    combined.includes("permission denied") ||
+    combined.includes("suspended") ||
+    combined.includes("consumer_suspended")
+  ) {
+    return { type: "auth", message: msg };
+  }
+
   if (
     status === 429 ||
     combined.includes("429") ||
     combined.includes("resource_exhausted") ||
-    combined.includes("rate")
+    combined.includes("rate_limit") ||
+    combined.includes("rate limit")
   ) {
     return { type: "rate_limit", message: msg };
-  }
-
-  if (
-    status === 401 ||
-    status === 403 ||
-    combined.includes("401") ||
-    combined.includes("403") ||
-    combined.includes("api_key_invalid") ||
-    combined.includes("permission")
-  ) {
-    return { type: "auth", message: msg };
   }
 
   if (
@@ -107,7 +109,10 @@ export async function withGeminiRetry<T>(
         }
 
         case "auth": {
-          markKeyBad(currentKey, "401/403 auth_failure");
+          const authReason = classified.message.toLowerCase().includes("suspended")
+            ? "403 suspended"
+            : "401/403 auth_failure";
+          markKeyBad(currentKey, authReason);
           const nextKey = getAvailableKeyExcluding(currentKey);
           if (!nextKey) {
             throw new Error(

@@ -236,6 +236,14 @@ export function markKeyBad(key: string, reason: string): void {
   const record = keys.find((k) => k.key === key);
   if (!record) return;
 
+  // Permanently block suspended keys
+  if (/suspended/i.test(reason)) {
+    sqlite.prepare("UPDATE api_keys SET is_blocked = 1 WHERE id = ?").run(record.id);
+    record.is_blocked = 1;
+    console.log(`[keyPool] Key ...${record.suffix} BLOCKED — ${reason}`);
+    return;
+  }
+
   const duration = cooldownDuration(reason);
   setCooldown(record.id, reason, duration);
   console.log(
