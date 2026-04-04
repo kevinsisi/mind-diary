@@ -28,7 +28,7 @@ interface UsageStats {
 
 interface SearchResult {
   id: number;
-  source: 'file' | 'diary';
+  source: 'file' | 'diary' | 'chat';
   title: string;
   snippet: string;
   created_at: string;
@@ -194,6 +194,7 @@ export default function Dashboard() {
                   key={`${result.source}-${result.id}`}
                   onClick={() => {
                     if (result.source === 'diary') navigate('/diary');
+                    else if (result.source === 'chat') navigate('/chat');
                     else navigate('/files');
                   }}
                   className="w-full text-left bg-white rounded-lg border border-gray-200 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all"
@@ -203,6 +204,11 @@ export default function Dashboard() {
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-indigo-100 text-indigo-700">
                         <BookOpen className="w-3 h-3" />
                         日記
+                      </span>
+                    ) : result.source === 'chat' ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-purple-100 text-purple-700">
+                        <MessageCircle className="w-3 h-3" />
+                        對話
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded-full bg-emerald-100 text-emerald-700">

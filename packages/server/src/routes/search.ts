@@ -57,7 +57,8 @@ router.get("/", (req: Request, res: Response) => {
       // FTS match can fail on syntax errors; skip
     }
 
-    // Search diary FTS5
+    // Search diary FTS5 (title + content)
+    const foundDiaryIds = new Set<number>();
     try {
       const diaryResults = sqlite
         .prepare(
@@ -75,13 +76,67 @@ router.get("/", (req: Request, res: Response) => {
         )
         .all(q) as SearchResult[];
 
-      // Attach tags to diary results
       for (const r of diaryResults) {
         r.tags = getEntryTags(r.id);
+        foundDiaryIds.add(r.id);
       }
       results.push(...diaryResults);
     } catch {
       // FTS match can fail on syntax errors; skip
+    }
+
+    // Search diary by tag name (LIKE match)
+    try {
+      const tagResults = sqlite
+        .prepare(
+          `SELECT DISTINCT
+            d.id,
+            'diary' as source,
+            d.title,
+            SUBSTR(d.content, 1, 100) as snippet,
+            d.created_at,
+            0 as rank
+          FROM diary_entries d
+          JOIN diary_entry_tags dt ON dt.diary_id = d.id
+          JOIN tags t ON t.id = dt.tag_id
+          WHERE t.name LIKE ?
+          ORDER BY d.created_at DESC`
+        )
+        .all(`%${q}%`) as SearchResult[];
+
+      for (const r of tagResults) {
+        if (!foundDiaryIds.has(r.id)) {
+          r.tags = getEntryTags(r.id);
+          results.push(r);
+        }
+      }
+    } catch {
+      // skip
+    }
+
+    // Search chat sessions by title
+    try {
+      const chatResults = sqlite
+        .prepare(
+          `SELECT
+            s.id,
+            'chat' as source,
+            s.title,
+            COALESCE(
+              (SELECT SUBSTR(content, 1, 100) FROM chat_messages WHERE session_id = s.id AND role = 'assistant' ORDER BY created_at DESC LIMIT 1),
+              ''
+            ) as snippet,
+            s.created_at,
+            0 as rank
+          FROM chat_sessions s
+          WHERE s.title LIKE ?
+          ORDER BY s.created_at DESC`
+        )
+        .all(`%${q}%`) as SearchResult[];
+
+      results.push(...chatResults);
+    } catch {
+      // skip
     }
 
     // Sort combined results by FTS5 rank (lower is better)
