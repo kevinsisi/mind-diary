@@ -134,7 +134,10 @@ export async function analyzeImage(
 
   return withGeminiRetry(async (apiKey) => {
     const client = createClient(apiKey);
-    const model = client.getGenerativeModel({ model: getModel() });
+    const model = client.getGenerativeModel({
+      model: getModel(),
+      generationConfig: { maxOutputTokens: 4096 },
+    });
 
     const imagePart = {
       inlineData: {

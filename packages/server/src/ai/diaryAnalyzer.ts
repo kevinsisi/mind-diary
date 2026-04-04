@@ -189,7 +189,7 @@ async function synthesize(
     const model = genai.getGenerativeModel({
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       systemInstruction: MASTER_AGENT_PROMPT,
-      generationConfig: { maxOutputTokens: 4096 },
+      generationConfig: { maxOutputTokens: 8192 },
     });
 
     const prompt = `日記標題：${title}\n\n日記內容：${content}\n\n以下是各位好友的分析：\n\n${analysisBlock}`;

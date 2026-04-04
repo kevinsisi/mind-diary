@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { apiClient } from '../api/client';
 import {
   Plus,
@@ -215,15 +216,17 @@ function ImageGallery({
             <img
               src={images[lightbox].url}
               alt={images[lightbox].filename}
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              className="max-w-full max-h-[55vh] object-contain rounded-lg shadow-2xl shrink-0"
             />
             {images[lightbox].ai_description && (
-              <p className="text-white/70 text-sm text-center max-w-lg px-4">
-                {images[lightbox].ai_description}
-              </p>
+              <div className="max-w-lg w-full max-h-[25vh] overflow-y-auto px-4 scrollbar-thin">
+                <div className="prose prose-sm prose-invert text-white/70 text-sm text-center leading-relaxed [&>*]:text-white/70 [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-white/90 [&>h2]:text-white/90 [&>h3]:text-white/90 [&>strong]:text-white/90">
+                  <ReactMarkdown>{images[lightbox].ai_description}</ReactMarkdown>
+                </div>
+              </div>
             )}
             {images.length > 1 && (
-              <p className="text-white/40 text-xs">{lightbox + 1} / {images.length}</p>
+              <p className="text-white/40 text-xs shrink-0">{lightbox + 1} / {images.length}</p>
             )}
           </div>
         </div>
@@ -1309,9 +1312,9 @@ export default function Diary() {
                 {/* Final Reflection (always shown if available) */}
                 {!analyzing && selectedEntry.ai_reflection && !showThinking && (
                   <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
-                    <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
-                      {selectedEntry.ai_reflection}
-                    </p>
+                    <div className="prose prose-sm text-indigo-900/80 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>h1]:text-indigo-900 [&>h2]:text-indigo-900 [&>h3]:text-indigo-800 [&>strong]:text-indigo-900">
+                      <ReactMarkdown>{selectedEntry.ai_reflection}</ReactMarkdown>
+                    </div>
                     {/* Collapsed agent results */}
                     {selectedEntry.ai_agents && selectedEntry.ai_agents.length > 0 && (
                       <button
@@ -1335,8 +1338,8 @@ export default function Diary() {
                           <span className="text-xs text-gray-400">{agent.role}</span>
                           <span className="text-xs text-green-500 ml-auto">✓</span>
                         </div>
-                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-48 overflow-y-auto">
-                          {agent.result}
+                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto prose prose-xs max-w-none [&>p]:my-0.5 [&>ul]:my-0.5 [&>ol]:my-0.5 [&>strong]:text-gray-800">
+                          <ReactMarkdown>{agent.result}</ReactMarkdown>
                         </div>
                       </div>
                     ))}
@@ -1345,9 +1348,9 @@ export default function Diary() {
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 mb-1">
                           🧠 整合回饋
                         </div>
-                        <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
-                          {selectedEntry.ai_reflection}
-                        </p>
+                        <div className="prose prose-sm text-indigo-900/80 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>strong]:text-indigo-900">
+                          <ReactMarkdown>{selectedEntry.ai_reflection}</ReactMarkdown>
+                        </div>
                       </div>
                     )}
                     <button onClick={() => setShowThinking(false)} className="text-xs text-gray-400 hover:text-gray-600">

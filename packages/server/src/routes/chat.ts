@@ -405,7 +405,7 @@ router.post(
         )
         .run(sessionId, content, imageUrl);
 
-      // Update session title with AI-generated title if it's the first message
+      // Check if this is the first message — title will be generated after AI responds
       const msgCount = (
         sqlite
           .prepare(
@@ -413,33 +413,7 @@ router.post(
           )
           .get(sessionId) as { count: number }
       ).count;
-
-      // Generate AI title asynchronously (don't block SSE stream)
-      if (msgCount === 1) {
-        (async () => {
-          try {
-            const aiTitle = await callGeminiWithRetry(
-              '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。只回傳標題本身。',
-              content.slice(0, 500),
-              200,
-              2,
-              'chat-title',
-            );
-            const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
-            if (cleanTitle) {
-              sqlite
-                .prepare("UPDATE chat_sessions SET title = ? WHERE id = ?")
-                .run(cleanTitle, sessionId);
-              sseWrite(res, { type: 'title-updated', sessionId, title: cleanTitle });
-            }
-          } catch {
-            // Fallback: use truncated content
-            const fallback = content.slice(0, 20) + (content.length > 20 ? '...' : '');
-            sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallback, sessionId);
-            sseWrite(res, { type: 'title-updated', sessionId, title: fallback });
-          }
-        })();
-      }
+      const isFirstMessage = msgCount === 1;
 
       // 2. Search FTS5 for relevant context
       sendEvent({ type: "phase", phase: "searching", message: "搜尋相關資料..." });
@@ -615,6 +589,32 @@ router.post(
         sendEvent,
         imagePart || undefined,
       );
+
+      // 6.5 Generate AI title from full conversation context (first message only)
+      if (isFirstMessage) {
+        (async () => {
+          try {
+            const titleContext = `使用者：${content.slice(0, 300)}\n\nAI 回覆：${aiResponse.slice(0, 500)}`;
+            const aiTitle = await callGeminiWithRetry(
+              '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
+              titleContext,
+              800,
+              2,
+              'chat-title',
+            );
+            const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
+            if (cleanTitle) {
+              sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(cleanTitle, sessionId);
+              sseWrite(res, { type: 'title-updated', sessionId, title: cleanTitle });
+            }
+          } catch {
+            // Fallback: use truncated user content
+            const fallback = content.slice(0, 20) + (content.length > 20 ? '...' : '');
+            sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallback, sessionId);
+            sseWrite(res, { type: 'title-updated', sessionId, title: fallback });
+          }
+        })();
+      }
 
       // 7. Save assistant message with ai_agents and dispatch_reason
       // Include agent text so thinking can be reconstructed on reload

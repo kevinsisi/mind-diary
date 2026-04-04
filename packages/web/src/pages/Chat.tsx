@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -298,8 +299,8 @@ function AgentMessageCard({
       )}
 
       {/* Response content */}
-      <div className="px-3 pb-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
-        {agent.text}
+      <div className="px-3 pb-3 text-sm text-gray-800 leading-relaxed prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 break-words">
+        <ReactMarkdown>{agent.text}</ReactMarkdown>
       </div>
     </div>
   );
@@ -366,8 +367,8 @@ function AssistantMessage({
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 text-gray-800 rounded-bl-md">
-        <div className="whitespace-pre-wrap break-words">
-          {msg.content}
+        <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 break-words">
+          <ReactMarkdown>{msg.content}</ReactMarkdown>
         </div>
         <div className="text-xs mt-1.5 text-gray-400">
           {formatTime(msg.created_at)}

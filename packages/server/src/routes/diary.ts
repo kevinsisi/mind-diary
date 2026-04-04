@@ -68,7 +68,7 @@ router.post("/", async (req: Request, res: Response) => {
       try {
         const generated = await generateText(
           `根據以下日記內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）：\n\n${content}`,
-          { maxTokens: 200 }
+          { maxTokens: 800 }
         );
         finalTitle = generated.text.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim();
       } catch {
