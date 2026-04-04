@@ -54,7 +54,7 @@ ${agent.systemPrompt}
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   let fullText = "";
 
-  // Use the batch-assigned key directly (no retry loop — faster, avoids hanging on bad keys)
+  // Use the batch-assigned key directly with a 30s timeout via AbortController
   const apiKey = _apiKey;
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
@@ -63,26 +63,36 @@ ${agent.systemPrompt}
     generationConfig: { maxOutputTokens: 300 },
   });
 
-  const streamResult = await geminiModel.generateContentStream(prompt);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-  for await (const chunk of streamResult.stream) {
-    const text = chunk.text();
-    if (text) {
-      fullText += text;
-      onEvent({
-        type: "agent-thinking",
-        agentId: agent.id,
-        agentName: agent.name,
-        agentEmoji: agent.emoji,
-        content: text,
-      });
+  try {
+    const streamResult = await geminiModel.generateContentStream(
+      { contents: [{ role: "user", parts: [{ text: prompt }] }] },
+      { signal: controller.signal } as any,
+    );
+
+    for await (const chunk of streamResult.stream) {
+      const text = chunk.text();
+      if (text) {
+        fullText += text;
+        onEvent({
+          type: "agent-thinking",
+          agentId: agent.id,
+          agentName: agent.name,
+          agentEmoji: agent.emoji,
+          content: text,
+        });
+      }
     }
-  }
 
-  const response = await streamResult.response;
-  const usage = response.usageMetadata;
-  if (usage) {
-    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
+    const response = await streamResult.response;
+    const usage = response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
+    }
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   onEvent({
