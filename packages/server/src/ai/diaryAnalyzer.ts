@@ -70,7 +70,9 @@ export async function selectAgentsWithAI(
         systemInstruction: systemPrompt,
         generationConfig: {
           maxOutputTokens: 512,
-          responseMimeType: 'application/json',
+          // NOTE: do NOT use responseMimeType: 'application/json' with gemini-2.5-flash (thinking model)
+          // — it causes truncated responses (body stops at `{\n  "selected": [`).
+          // Parse JSON from plain text response instead.
         },
       });
       const timeout = new Promise<never>((_, reject) =>
