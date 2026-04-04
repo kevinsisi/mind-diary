@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
-import { AGENTS } from "../ai/agents.js";
-import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
+import { AGENTS, AgentPersona } from "../ai/agents.js";
+import { trackUsageByKey } from "../ai/keyPool.js";
+import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { selectAgents } from "../ai/diaryAnalyzer.js";
 import { IntentResult } from "../ai/intentAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
@@ -25,57 +26,40 @@ function sseWrite(res: Response, event: Record<string, any>): void {
 
 
 // ── Gemini call with key rotation + 15s timeout ─────────────────────
+// Uses withGeminiRetry for proper cooldown tracking (same as diaryAnalyzer)
 
 async function callGeminiWithRetry(
   systemPrompt: string,
   prompt: string,
   maxTokens: number,
-  maxAttempts: number = 3,
+  maxRetries: number = 3,
+  callType: string = "chat",
 ): Promise<string> {
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-  const keys = assignBatchKeys(maxAttempts);
-  let lastError: unknown;
 
-  for (let i = 0; i < Math.min(maxAttempts, keys.length); i++) {
-    const apiKey = keys[i];
-    try {
-      const genai = new GoogleGenerativeAI(apiKey);
-      const model = genai.getGenerativeModel({
-        model: modelName,
-        systemInstruction: systemPrompt,
-        generationConfig: { maxOutputTokens: maxTokens },
-      });
+  return withGeminiRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const model = genai.getGenerativeModel({
+      model: modelName,
+      systemInstruction: systemPrompt,
+      generationConfig: { maxOutputTokens: maxTokens },
+    });
 
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 15000)
-      );
-      const response = await Promise.race([
-        model.generateContent(prompt),
-        timeout,
-      ]);
-      const text = response.response.text();
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), 15000)
+    );
+    const response = await Promise.race([
+      model.generateContent(prompt),
+      timeout,
+    ]);
+    const text = response.response.text();
 
-      const usage = response.response.usageMetadata;
-      if (usage) {
-        trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat");
-      }
-      return text;
-    } catch (err: any) {
-      lastError = err;
-      const msg = err?.message || "";
-      // Block suspended keys permanently
-      if (msg.includes("suspended")) {
-        const { markKeyBad } = await import("../ai/keyPool.js");
-        markKeyBad(apiKey, "403 suspended");
-      }
-      // Continue to next key for 429/timeout/suspended
-      if (msg.includes("429") || msg.includes("timeout") || msg.includes("suspended") || msg.includes("403")) {
-        continue;
-      }
-      throw err; // Unknown errors — don't retry
+    const usage = response.response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, callType);
     }
-  }
-  throw lastError || new Error("All keys exhausted");
+    return text;
+  }, { maxRetries });
 }
 
 // ── Run a single agent in chat mode ──────────────────────────────────
@@ -110,7 +94,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 300, 5);
+  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 300, 5, "chat-agent");
 
   // Send the full result as a single "thinking" event
   if (fullText) {
@@ -121,11 +105,6 @@ ${agent.systemPrompt}
       agentEmoji: agent.emoji,
       content: fullText,
     });
-  }
-
-  const usage = response.response.usageMetadata;
-  if (usage) {
-    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
   }
 
   onEvent({
@@ -187,7 +166,7 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
 
-  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 1024, 5);
+  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 1024, 5, "chat-master");
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
