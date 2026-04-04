@@ -98,7 +98,8 @@ async function runChatAgent(
   contextStr: string,
   historyStr: string,
   _apiKey: string, // ignored — withStreamRetry handles key selection
-  onEvent: (event: Record<string, any>) => void
+  onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
     type: "agent-start",
@@ -116,9 +117,14 @@ ${agent.systemPrompt}
 - 你的回應會被整合到最終回覆中
 - 保持簡短（2-3句話）
 - 用對話的口吻，不要像報告
+- 使用者的文字問題是主要意圖，必須優先回應文字問題
+- 如果使用者同時上傳了圖片，圖片只是輔助資訊，不要讓圖片內容蓋過文字問題
+- 如果使用者只傳圖片沒有文字，才以圖片內容為主
 - 如果有相關資料被提供，引用它`;
 
-  let prompt = `使用者訊息：${userMessage}`;
+  // Text question is the primary intent
+  let prompt = `使用者的問題（主要回應目標）：${userMessage}`;
+  if (imagePart) prompt += `\n\n【使用者同時上傳了圖片（輔助資訊，不要忽視文字問題）】\n${imagePart}`;
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
@@ -171,6 +177,7 @@ async function synthesizeChat(
   contextStr: string,
   historyStr: string,
   onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
 
@@ -188,11 +195,12 @@ async function synthesizeChat(
     })
     .join("、");
 
-  let prompt = `使用者訊息：${userMessage}\n\n`;
+  let prompt = `使用者的問題（主要回應目標）：${userMessage}\n\n`;
+  if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
-  prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
+  prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
   const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 1024, 5, "chat-master");
   onEvent({ type: "synthesizing", content: fullText });
@@ -416,6 +424,7 @@ router.post(
       // 2. Search FTS5 for relevant context
       sendEvent({ type: "phase", phase: "searching", message: "搜尋相關資料..." });
 
+      let imagePart = ""; // image analysis stored separately to preserve intent priority
       let contextParts: string[] = [];
 
       try {
@@ -458,7 +467,7 @@ router.post(
         // FTS match might fail; ignore
       }
 
-      // Analyze uploaded image (if any) and prepend to context
+      // Analyze uploaded image (if any) — kept separate so text question stays primary intent
       if (req.file) {
         sendEvent({ type: "phase", phase: "analyzing-image", message: "分析圖片中..." });
         try {
@@ -474,10 +483,10 @@ router.post(
             ),
             imgTimeout,
           ]);
-          contextParts.unshift(`[使用者上傳的圖片分析]\n${imgResult.text}`);
+          imagePart = imgResult.text;
         } catch (imgErr) {
           console.error("[chat] Image analysis failed:", imgErr);
-          contextParts.unshift("[使用者上傳了一張圖片，但分析失敗]");
+          imagePart = "（圖片分析失敗）";
         }
       }
 
@@ -501,9 +510,10 @@ router.post(
       // 4. AI-based agent selection with reasoning
       sendEvent({ type: "phase", phase: "analyzing", message: "AI 分析訊息，選擇最適合的好友..." });
 
-      const selectionInput = contextStr
-        ? `使用者訊息：${content}\n\n相關背景資料：\n${contextStr}`
-        : `使用者訊息：${content}`;
+      // Build agent selection input — text question is primary intent, image is auxiliary
+      let selectionInput = `使用者的問題（主要意圖）：${content}`;
+      if (imagePart) selectionInput += `\n\n【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}`;
+      if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
       const { selections, summary: selectionSummary } = await selectAgentsWithAI(selectionInput, 3);
 
@@ -552,7 +562,8 @@ router.post(
           contextStr,
           historyStr,
           "",
-          sendEvent
+          sendEvent,
+          imagePart || undefined,
         ).catch((err) => {
           console.error(`[chat] Agent ${agent.id} failed:`, err);
           sendEvent({
@@ -582,9 +593,14 @@ router.post(
         contextStr,
         historyStr,
         sendEvent,
+        imagePart || undefined,
       );
 
       // 7. Save assistant message with ai_agents and dispatch_reason
+      // Include agent text so thinking can be reconstructed on reload
+      const agentTextMap: Record<string, string> = {};
+      for (const r of agentResults) agentTextMap[r.agentId] = r.result;
+
       const aiAgentsJson = JSON.stringify(
         intentResult.agents.map((a) => {
           const agent = AGENTS[a.id];
@@ -594,6 +610,7 @@ router.post(
             emoji: agent?.emoji || "🤖",
             role: agent?.role || "",
             reason: a.reason,
+            text: agentTextMap[a.id] || "",
           };
         })
       );

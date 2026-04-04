@@ -575,6 +575,40 @@ export default function Chat() {
       );
       const list = Array.isArray(data) ? data : data?.messages || [];
       setMessages(list);
+
+      // Reconstruct thinking data from saved ai_agents + dispatch_reason
+      const thinkingMap: Record<number, ThinkingData> = {};
+      for (const msg of list) {
+        if (msg.role === 'assistant' && msg.ai_agents) {
+          try {
+            const agents = JSON.parse(msg.ai_agents);
+            if (Array.isArray(agents) && agents.length > 0) {
+              const agentStates: Record<string, AgentThinkingState> = {};
+              const agentReasons: Record<string, string> = {};
+              for (const a of agents) {
+                if (!a.id) continue;
+                agentStates[a.id] = {
+                  name: a.name || a.id,
+                  emoji: a.emoji || '🤖',
+                  role: a.role || '',
+                  text: a.text || '',
+                  done: true,
+                };
+                agentReasons[a.id] = a.reason || '';
+              }
+              thinkingMap[msg.id] = {
+                agents: agentStates,
+                synthesisText: '',
+                phase: '',
+                collapsed: true,
+                dispatchSummary: msg.dispatch_reason || '',
+                agentReasons,
+              };
+            }
+          } catch { /* ignore */ }
+        }
+      }
+      setMessageThinking(thinkingMap);
     } catch (err) {
       console.error('Failed to load messages:', err);
       setMessages([]);
@@ -822,10 +856,24 @@ export default function Chat() {
             if (event.type === 'intent') {
               setCurrentThinking((prev) => {
                 if (!prev) return prev;
+                // Pre-populate agent cards from intent so reasoning shows immediately
+                const prePopulated: Record<string, AgentThinkingState> = {};
+                if (event.agents) {
+                  for (const a of event.agents) {
+                    prePopulated[a.id] = {
+                      name: a.name,
+                      emoji: a.emoji,
+                      role: a.role,
+                      text: '',
+                      done: false,
+                    };
+                  }
+                }
                 return {
                   ...prev,
                   dispatchSummary: event.summary || prev.dispatchSummary,
                   agentReasons: event.reasons || prev.agentReasons,
+                  agents: { ...prePopulated, ...prev.agents },
                 };
               });
             } else if (event.type === 'phase') {
@@ -988,7 +1036,11 @@ export default function Chat() {
   // ── Render helpers ──────────────────────────────────────────────
 
   const formatTime = (dateStr: string) => {
-    const d = new Date(dateStr);
+    // SQLite stores UTC without timezone suffix — add Z so JS parses as UTC, then converts to local
+    const normalized = /Z|[+-]\d{2}:?\d{2}$/.test(dateStr)
+      ? dateStr
+      : dateStr.replace(' ', 'T') + 'Z';
+    const d = new Date(normalized);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
     if (isToday) {
