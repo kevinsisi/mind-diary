@@ -1,11 +1,27 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
 import { sqlite } from "../db/connection.js";
 import { AGENTS, AgentPersona } from "../ai/agents.js";
 import { trackUsageByKey } from "../ai/keyPool.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
+import { analyzeImage } from "../ai/geminiClient.js";
 import { selectAgents } from "../ai/diaryAnalyzer.js";
 import { IntentResult } from "../ai/intentAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// ── Multer for chat image uploads (memory storage, not persisted) ────
+const chatImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支援的圖片格式: ${file.mimetype}`));
+    }
+  },
+});
 
 const router = Router();
 
@@ -314,9 +330,10 @@ router.delete("/sessions/:id", (req: Request, res: Response) => {
 
 router.post(
   "/sessions/:id/messages",
+  chatImageUpload.single("image"),
   async (req: Request, res: Response) => {
     const sessionId = Number(req.params.id);
-    const { content } = req.body;
+    const content = req.body.content;
 
     if (!content) {
       return res.status(400).json({ error: "訊息內容不能為空" });
@@ -423,6 +440,22 @@ router.post(
         }
       } catch {
         // FTS match might fail; ignore
+      }
+
+      // Analyze uploaded image (if any) and prepend to context
+      if (req.file) {
+        sendEvent({ type: "phase", phase: "analyzing-image", message: "分析圖片中..." });
+        try {
+          const imgResult = await analyzeImage(
+            req.file.buffer,
+            req.file.mimetype,
+            "請詳細描述這張圖片的內容，包括主要元素、色彩、文字、情境等所有細節。"
+          );
+          contextParts.unshift(`[使用者上傳的圖片分析]\n${imgResult.text}`);
+        } catch (imgErr) {
+          console.error("[chat] Image analysis failed:", imgErr);
+          contextParts.unshift("[使用者上傳了一張圖片，但分析失敗]");
+        }
       }
 
       const contextStr =

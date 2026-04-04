@@ -144,6 +144,20 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Diary images (attached to diary entries)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS diary_images (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      diary_id INTEGER NOT NULL REFERENCES diary_entries(id) ON DELETE CASCADE,
+      filename TEXT NOT NULL,
+      filepath TEXT NOT NULL,
+      mimetype TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      ai_description TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+
   // Add ai_agents and dispatch_reason to chat_messages if they don't exist
   const chatMsgCols = db.prepare("PRAGMA table_info(chat_messages)").all() as any[];
   if (!chatMsgCols.some((c: any) => c.name === 'ai_agents')) {

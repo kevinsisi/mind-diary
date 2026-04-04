@@ -14,6 +14,7 @@ import {
   Folder,
   FolderInput,
   X,
+  Image as ImageIcon,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -499,6 +500,11 @@ export default function Chat() {
   // Stored thinking data keyed by the assistant message id that follows it
   const [messageThinking, setMessageThinking] = useState<Record<number, ThinkingData>>({});
 
+  // Image attachment for chat
+  const [chatImage, setChatImage] = useState<File | null>(null);
+  const [chatImagePreview, setChatImagePreview] = useState<string | null>(null);
+  const chatImageInputRef = useRef<HTMLInputElement>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -697,11 +703,37 @@ export default function Chat() {
     return map;
   })();
 
+  // ── Chat image helpers ──────────────────────────────────────────
+
+  const attachChatImage = (file: File) => {
+    const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    if (!allowed.includes(file.type)) return;
+    if (chatImagePreview) URL.revokeObjectURL(chatImagePreview);
+    setChatImage(file);
+    setChatImagePreview(URL.createObjectURL(file));
+  };
+
+  const clearChatImage = () => {
+    if (chatImagePreview) URL.revokeObjectURL(chatImagePreview);
+    setChatImage(null);
+    setChatImagePreview(null);
+  };
+
+  const handleInputPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData.files.length > 0) {
+      const file = e.clipboardData.files[0];
+      if (file.type.startsWith('image/')) {
+        e.preventDefault();
+        attachChatImage(file);
+      }
+    }
+  };
+
   // ── Send message (SSE streaming) ────────────────────────────────
 
   const sendMessage = async () => {
     const content = input.trim();
-    if (!content || sendingMessage) return;
+    if ((!content && !chatImage) || sendingMessage) return;
 
     let sessionId = activeSessionId;
 
@@ -718,14 +750,18 @@ export default function Chat() {
       }
     }
 
+    const imageFile = chatImage;
+    const messageContent = content || (imageFile ? '🖼️ [圖片]' : '');
+
     setInput('');
+    clearChatImage();
     setSendingMessage(true);
 
     // Optimistic: add user message immediately
     const tempUserMsg: Message = {
       id: Date.now(),
       role: 'user',
-      content,
+      content: messageContent,
       created_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, tempUserMsg]);
@@ -742,11 +778,22 @@ export default function Chat() {
     setCurrentThinking(thinking);
 
     try {
-      const response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
+      let response: Response;
+      if (imageFile) {
+        const fd = new FormData();
+        fd.append('content', messageContent);
+        fd.append('image', imageFile);
+        response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
+          method: 'POST',
+          body: fd,
+        });
+      } else {
+        response = await fetch(`/api/chat/sessions/${sessionId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content }),
+        });
+      }
 
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No stream');
@@ -893,7 +940,7 @@ export default function Chat() {
       // Remove optimistic message on error
       setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
       setCurrentThinking(null);
-      setInput(content); // restore input
+      setInput(messageContent !== '🖼️ [圖片]' ? messageContent : ''); // restore input
     } finally {
       setSendingMessage(false);
       inputRef.current?.focus();
@@ -1189,38 +1236,71 @@ export default function Chat() {
 
             {/* Input bar */}
             <div className="border-t border-gray-200 bg-white px-3 lg:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-              <div className="max-w-full lg:max-w-3xl mx-auto flex items-end gap-2 lg:gap-3">
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="輸入訊息..."
-                  rows={1}
-                  className="flex-1 resize-none rounded-xl border border-gray-300 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
-                  style={{
-                    height: 'auto',
-                    minHeight: '2.75rem',
-                  }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    target.style.height = 'auto';
-                    target.style.height = Math.min(target.scrollHeight, 128) + 'px';
-                  }}
-                  disabled={sendingMessage}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={!input.trim() || sendingMessage}
-                  className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  title="發送訊息"
-                >
-                  {sendingMessage ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Send size={18} />
-                  )}
-                </button>
+              <div className="max-w-full lg:max-w-3xl mx-auto space-y-2">
+                {/* Image preview */}
+                {chatImagePreview && (
+                  <div className="flex items-center gap-2 px-1">
+                    <div className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                      <img src={chatImagePreview} alt="" className="w-full h-full object-cover" />
+                      <button
+                        onClick={clearChatImage}
+                        className="absolute top-0.5 right-0.5 p-0.5 bg-black/60 text-white rounded-full hover:bg-red-600 transition-colors"
+                      >
+                        <X size={10} />
+                      </button>
+                    </div>
+                    <span className="text-xs text-gray-400">圖片已附加，AI 將分析此圖片</span>
+                  </div>
+                )}
+
+                <div className="flex items-end gap-2 lg:gap-3">
+                  {/* Image attach button */}
+                  <button
+                    onClick={() => chatImageInputRef.current?.click()}
+                    disabled={sendingMessage}
+                    className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors disabled:opacity-40"
+                    title="附加圖片"
+                  >
+                    <ImageIcon size={18} />
+                  </button>
+                  <input
+                    ref={chatImageInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    className="hidden"
+                    onChange={e => { if (e.target.files?.[0]) attachChatImage(e.target.files[0]); e.target.value = ''; }}
+                  />
+
+                  <textarea
+                    ref={inputRef}
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onPaste={handleInputPaste}
+                    placeholder={chatImage ? '補充圖片說明（可選）...' : '輸入訊息或貼上圖片...'}
+                    rows={1}
+                    className="flex-1 resize-none rounded-xl border border-gray-300 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
+                    style={{ height: 'auto', minHeight: '2.75rem' }}
+                    onInput={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      target.style.height = 'auto';
+                      target.style.height = Math.min(target.scrollHeight, 128) + 'px';
+                    }}
+                    disabled={sendingMessage}
+                  />
+                  <button
+                    onClick={sendMessage}
+                    disabled={(!input.trim() && !chatImage) || sendingMessage}
+                    className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="發送訊息"
+                  >
+                    {sendingMessage ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <Send size={18} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </>

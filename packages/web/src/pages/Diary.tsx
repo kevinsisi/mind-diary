@@ -12,6 +12,8 @@ import {
   ChevronRight,
   BookOpen,
   Loader2,
+  Image as ImageIcon,
+  ChevronLeft,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -24,6 +26,17 @@ interface AgentResult {
   result: string;
 }
 
+interface DiaryImage {
+  id: number;
+  diary_id: number;
+  filename: string;
+  mimetype: string;
+  size: number;
+  url: string;
+  ai_description: string | null;
+  created_at: string;
+}
+
 interface DiaryEntry {
   id: number;
   title: string;
@@ -32,6 +45,7 @@ interface DiaryEntry {
   ai_reflection: string | null;
   ai_agents: AgentResult[] | null;
   tags: string[];
+  images: DiaryImage[];
   folder_id: number | null;
   created_at: string;
   updated_at: string;
@@ -119,6 +133,103 @@ function truncate(text: string, lines: number): string {
   return result.length < text.length ? result + '…' : result;
 }
 
+// ── ImageGallery ────────────────────────────────────────────────────
+
+function ImageGallery({
+  images,
+  onDelete,
+}: {
+  images: DiaryImage[];
+  onDelete?: (id: number) => void;
+}) {
+  const [lightbox, setLightbox] = useState<number | null>(null);
+
+  if (images.length === 0) return null;
+
+  const prev = () => setLightbox(i => (i !== null ? (i - 1 + images.length) % images.length : null));
+  const next = () => setLightbox(i => (i !== null ? (i + 1) % images.length : null));
+
+  return (
+    <>
+      <div className={`grid gap-2 ${images.length === 1 ? 'grid-cols-1' : images.length === 2 ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'}`}>
+        {images.map((img, i) => (
+          <div
+            key={img.id}
+            className="relative group rounded-xl overflow-hidden bg-gray-100 cursor-pointer"
+            style={{ aspectRatio: images.length === 1 ? '16/9' : '1/1' }}
+            onClick={() => setLightbox(i)}
+          >
+            <img
+              src={img.url}
+              alt={img.filename}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+            {onDelete && (
+              <button
+                onClick={e => { e.stopPropagation(); onDelete(img.id); }}
+                className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+              >
+                <X size={12} />
+              </button>
+            )}
+            {img.ai_description && (
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <p className="text-white text-xs line-clamp-2">{img.ai_description}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox !== null && (
+        <div
+          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
+          onClick={() => setLightbox(null)}
+        >
+          <button
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 transition-colors"
+            onClick={() => setLightbox(null)}
+          >
+            <X size={28} />
+          </button>
+          {images.length > 1 && (
+            <>
+              <button
+                className="absolute left-4 text-white/80 hover:text-white p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                onClick={e => { e.stopPropagation(); prev(); }}
+              >
+                <ChevronLeft size={24} />
+              </button>
+              <button
+                className="absolute right-4 text-white/80 hover:text-white p-3 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+                onClick={e => { e.stopPropagation(); next(); }}
+              >
+                <ChevronRight size={24} />
+              </button>
+            </>
+          )}
+          <div className="flex flex-col items-center gap-3 max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <img
+              src={images[lightbox].url}
+              alt={images[lightbox].filename}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
+            />
+            {images[lightbox].ai_description && (
+              <p className="text-white/70 text-sm text-center max-w-lg px-4">
+                {images[lightbox].ai_description}
+              </p>
+            )}
+            {images.length > 1 && (
+              <p className="text-white/40 text-xs">{lightbox + 1} / {images.length}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Component ──────────────────────────────────────────────────────
 
 export default function Diary() {
@@ -151,6 +262,12 @@ export default function Diary() {
   // Folder creation
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Image upload (edit mode)
+  const [pendingImages, setPendingImages] = useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   // Loading
   const [loading, setLoading] = useState(false);
@@ -219,6 +336,59 @@ export default function Diary() {
 
   // ── Handlers ───────────────────────────────────────────────────
 
+  function clearPendingImages() {
+    pendingPreviews.forEach(url => URL.revokeObjectURL(url));
+    setPendingImages([]);
+    setPendingPreviews([]);
+  }
+
+  function addPendingImages(files: FileList | File[]) {
+    const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+    const newFiles = Array.from(files).filter(f => allowed.includes(f.type));
+    if (newFiles.length === 0) return;
+    setPendingImages(prev => [...prev, ...newFiles]);
+    setPendingPreviews(prev => [...prev, ...newFiles.map(f => URL.createObjectURL(f))]);
+  }
+
+  function removePendingImage(index: number) {
+    URL.revokeObjectURL(pendingPreviews[index]);
+    setPendingImages(prev => prev.filter((_, i) => i !== index));
+    setPendingPreviews(prev => prev.filter((_, i) => i !== index));
+  }
+
+  async function uploadPendingImages(diaryId: number) {
+    if (pendingImages.length === 0) return;
+    setUploadingImages(true);
+    try {
+      const fd = new FormData();
+      for (const f of pendingImages) fd.append('images', f);
+      const uploaded = await apiClient.postFormData<DiaryImage[]>(`/api/diary/${diaryId}/images`, fd);
+      setSelectedEntry(prev => prev ? { ...prev, images: [...(prev.images || []), ...uploaded] } : prev);
+      clearPendingImages();
+    } catch {
+      // silent
+    } finally {
+      setUploadingImages(false);
+    }
+  }
+
+  async function handleDeleteImage(imageId: number) {
+    if (!selectedEntry) return;
+    try {
+      await apiClient.delete(`/api/diary/${selectedEntry.id}/images/${imageId}`);
+      setSelectedEntry(prev => prev ? { ...prev, images: prev.images.filter(img => img.id !== imageId) } : prev);
+    } catch {
+      // silent
+    }
+  }
+
+  function handleEditPaste(e: React.ClipboardEvent) {
+    if (e.clipboardData.files.length > 0) {
+      e.preventDefault();
+      addPendingImages(e.clipboardData.files);
+    }
+  }
+
   function startNew() {
     setSelectedEntry(null);
     setEditMode(true);
@@ -229,6 +399,7 @@ export default function Diary() {
     setEditFolderId(activeFolder);
     setEditTags([]);
     setTagInput('');
+    clearPendingImages();
   }
 
   function startEdit(entry: DiaryEntry) {
@@ -240,6 +411,7 @@ export default function Diary() {
     setEditFolderId(entry.folder_id);
     setEditTags([...entry.tags]);
     setTagInput('');
+    clearPendingImages();
   }
 
   function cancelEdit() {
@@ -248,6 +420,7 @@ export default function Diary() {
       setSelectedEntry(null);
     }
     setIsNew(false);
+    clearPendingImages();
   }
 
   async function handleSave() {
@@ -264,6 +437,8 @@ export default function Diary() {
         const created = await apiClient.post<DiaryEntry>('/api/diary', body);
         setSelectedEntry(created);
         setEntries((prev) => [created, ...prev]);
+        // Upload pending images before analysis
+        await uploadPendingImages(created.id);
         // Auto-trigger multi-agent analysis
         setTimeout(() => handleAnalyze(created), 100);
       } else if (selectedEntry) {
@@ -275,8 +450,11 @@ export default function Diary() {
           tags: editTags,
         };
         const updated = await apiClient.put<DiaryEntry>(`/api/diary/${selectedEntry.id}`, body);
-        setSelectedEntry(updated);
-        setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+        await uploadPendingImages(updated.id);
+        // Refresh to get updated images
+        const refreshed = await apiClient.get<DiaryEntry>(`/api/diary/${updated.id}`);
+        setSelectedEntry(refreshed);
+        setEntries((prev) => prev.map((e) => (e.id === refreshed.id ? refreshed : e)));
       }
       setEditMode(false);
       setIsNew(false);
@@ -664,7 +842,7 @@ export default function Diary() {
           </div>
         ) : editMode ? (
           /* ── EDIT MODE ────────────────────────────────────────── */
-          <div className="flex flex-col h-full">
+          <div className="flex flex-col h-full" onPaste={handleEditPaste}>
             {/* Edit header */}
             <div className="flex items-center justify-between p-4 border-b border-gray-100">
               <h3 className="font-semibold text-gray-900">
@@ -803,6 +981,80 @@ export default function Diary() {
                   </div>
                 </div>
               )}
+
+              {/* Images */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">圖片</label>
+
+                {/* Existing images (edit mode) */}
+                {!isNew && selectedEntry?.images && selectedEntry.images.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {selectedEntry.images.map(img => (
+                      <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                        <img src={img.url} alt={img.filename} className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => handleDeleteImage(img.id)}
+                          className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending image previews */}
+                {pendingPreviews.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    {pendingPreviews.map((url, i) => (
+                      <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
+                          <span className="text-[10px] text-indigo-700 bg-white/80 px-1.5 py-0.5 rounded font-medium">待上傳</span>
+                        </div>
+                        <button
+                          onClick={() => removePendingImage(i)}
+                          className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Drop zone */}
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); addPendingImages(e.dataTransfer.files); }}
+                  onClick={() => imageInputRef.current?.click()}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') imageInputRef.current?.click(); }}
+                  className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                >
+                  {uploadingImages ? (
+                    <div className="flex items-center justify-center gap-2 text-indigo-500">
+                      <Loader2 size={18} className="animate-spin" />
+                      <span className="text-sm">上傳中...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300" />
+                      <p className="text-sm text-gray-400">拖放、點擊或貼上圖片 (Ctrl+V)</p>
+                      <p className="text-xs text-gray-300 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
+                    </>
+                  )}
+                </div>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  multiple
+                  className="hidden"
+                  onChange={e => { if (e.target.files) addPendingImages(e.target.files); e.target.value = ''; }}
+                />
+              </div>
             </div>
           </div>
         ) : selectedEntry ? (
@@ -872,6 +1124,11 @@ export default function Diary() {
               <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
                 {selectedEntry.content}
               </div>
+
+              {/* Image Gallery */}
+              {selectedEntry.images && selectedEntry.images.length > 0 && (
+                <ImageGallery images={selectedEntry.images} onDelete={handleDeleteImage} />
+              )}
 
               {/* AI Analysis Section */}
               <div className="mt-6 space-y-3">
@@ -1064,6 +1321,11 @@ export default function Diary() {
             <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
               {selectedEntry.content}
             </div>
+
+            {/* Mobile Image Gallery */}
+            {selectedEntry.images && selectedEntry.images.length > 0 && (
+              <ImageGallery images={selectedEntry.images} onDelete={handleDeleteImage} />
+            )}
 
             {/* Mobile AI Section */}
             <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">

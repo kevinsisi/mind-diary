@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { generateReflection } from "../ai/geminiClient.js";
 
@@ -19,6 +20,16 @@ function getEntryTags(entryId: number): string[] {
     `SELECT t.name FROM tags t JOIN diary_entry_tags dt ON dt.tag_id = t.id WHERE dt.diary_id = ?`
   ).all(entryId) as { name: string }[];
   return rows.map(r => r.name);
+}
+
+function getEntryImages(entryId: number): any[] {
+  const rows = sqlite.prepare(
+    `SELECT id, diary_id, filename, filepath, mimetype, size, ai_description, created_at FROM diary_images WHERE diary_id = ? ORDER BY created_at ASC`
+  ).all(entryId) as any[];
+  return rows.map(r => ({
+    ...r,
+    url: `/images/${r.filepath.replace(/\\/g, '/').split('/').pop()}`,
+  }));
 }
 
 function upsertTagsForEntry(entryId: number, tagNames: string[]): void {
@@ -65,7 +76,7 @@ router.post("/", async (req: Request, res: Response) => {
       .prepare("SELECT * FROM diary_entries WHERE id = ?")
       .get(entryId) as any;
 
-    res.status(201).json({ ...entry, tags: [], ai_agents: null });
+    res.status(201).json({ ...entry, tags: [], images: [], ai_agents: null });
   } catch (err: any) {
     console.error("[diary] Create error:", err);
     res.status(500).json({ error: err.message || "建立失敗" });
@@ -109,10 +120,11 @@ router.get("/", (req: Request, res: Response) => {
       .prepare(querySql + joinStr + whereStr + " ORDER BY d.created_at DESC LIMIT ? OFFSET ?")
       .all(...params, limit, offset) as any[];
 
-    // Attach tags to each entry, parse ai_agents JSON
+    // Attach tags, images, parse ai_agents JSON
     const entriesWithTags = entries.map(e => ({
       ...e,
       tags: getEntryTags(e.id),
+      images: getEntryImages(e.id),
       ai_agents: e.ai_agents ? JSON.parse(e.ai_agents) : null,
     }));
 
@@ -145,6 +157,7 @@ router.get("/:id", (req: Request, res: Response) => {
     res.json({
       ...entry,
       tags: getEntryTags(entry.id),
+      images: getEntryImages(entry.id),
       ai_agents: entry.ai_agents ? JSON.parse(entry.ai_agents) : null,
     });
   } catch (err: any) {
@@ -195,7 +208,7 @@ router.put("/:id", (req: Request, res: Response) => {
       .prepare("SELECT * FROM diary_entries WHERE id = ?")
       .get(id) as any;
 
-    res.json({ ...entry, tags: getEntryTags(id) });
+    res.json({ ...entry, tags: getEntryTags(id), images: getEntryImages(id) });
   } catch (err: any) {
     console.error("[diary] Update error:", err);
     res.status(500).json({ error: err.message || "更新失敗" });
@@ -220,6 +233,13 @@ router.delete("/:id", (req: Request, res: Response) => {
 
     // Remove tag junctions
     sqlite.prepare("DELETE FROM diary_entry_tags WHERE diary_id = ?").run(id);
+
+    // Remove associated images (files + DB rows)
+    const images = sqlite.prepare("SELECT filepath FROM diary_images WHERE diary_id = ?").all(id) as { filepath: string }[];
+    for (const img of images) {
+      try { fs.unlinkSync(img.filepath); } catch {}
+    }
+    sqlite.prepare("DELETE FROM diary_images WHERE diary_id = ?").run(id);
 
     // Remove DB record
     sqlite.prepare("DELETE FROM diary_entries WHERE id = ?").run(id);
