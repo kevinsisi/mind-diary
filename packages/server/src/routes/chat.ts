@@ -125,7 +125,8 @@ async function synthesizeChat(
   userMessage: string,
   contextStr: string,
   historyStr: string,
-  onEvent: (event: Record<string, any>) => void
+  onEvent: (event: Record<string, any>) => void,
+  synthesisKey?: string
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
 
@@ -143,47 +144,43 @@ async function synthesizeChat(
     })
     .join("、");
 
-  const result = await withGeminiRetry(async (apiKey) => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const model = genai.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
-      systemInstruction: MASTER_CHAT_PROMPT,
-      generationConfig: {
-        maxOutputTokens: 1024,
-        // @ts-ignore — disable thinking for fast responses
-        thinkingConfig: { thinkingBudget: 0 },
-      },
-    });
-
-    let prompt = `使用者訊息：${userMessage}\n\n`;
-    if (contextStr) {
-      prompt += `【相關資料】\n${contextStr}\n\n`;
-    }
-    if (historyStr) {
-      prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
-    }
-    prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
-    prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
-
-    const response = await model.generateContent(prompt);
-    const fullText = response.response.text();
-    onEvent({ type: "synthesizing", content: fullText });
-
-    const usage = response.response.usageMetadata;
-    if (usage) {
-      trackUsageByKey(
-        apiKey,
-        process.env.GEMINI_MODEL || "gemini-2.5-flash",
-        usage.promptTokenCount || 0,
-        usage.candidatesTokenCount || 0,
-        "chat-master"
-      );
-    }
-
-    return fullText;
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  const apiKey = synthesisKey || assignBatchKeys(1)[0];
+  const genai = new GoogleGenerativeAI(apiKey);
+  const model = genai.getGenerativeModel({
+    model: modelName,
+    systemInstruction: MASTER_CHAT_PROMPT,
+    generationConfig: { maxOutputTokens: 1024 },
   });
 
-  return result;
+  let prompt = `使用者訊息：${userMessage}\n\n`;
+  if (contextStr) {
+    prompt += `【相關資料】\n${contextStr}\n\n`;
+  }
+  if (historyStr) {
+    prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+  }
+  prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
+  prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
+
+  console.log(`[chat-synth] calling generateContent with key ...${apiKey.slice(-6)}`);
+  const timeoutPromise = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error("Synthesis timeout (20s)")), 20000)
+  );
+  const response = await Promise.race([
+    model.generateContent(prompt),
+    timeoutPromise,
+  ]);
+  const fullText = response.response.text();
+  console.log(`[chat-synth] got response: ${fullText.slice(0, 50)}...`);
+  onEvent({ type: "synthesizing", content: fullText });
+
+  const usage = response.response.usageMetadata;
+  if (usage) {
+    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-master");
+  }
+
+  return fullText;
 }
 
 // ── Chat Folders CRUD ────────────────────────────────────────────────
@@ -507,8 +504,9 @@ router.post(
         })),
       });
 
-      // 5. Run agents in parallel with batch keys
-      const keys = assignBatchKeys(selectedAgents.length);
+      // 5. Run agents in parallel with batch keys (+1 for synthesis)
+      const keys = assignBatchKeys(selectedAgents.length + 1);
+      const synthesisKey = keys[keys.length - 1];
       const agentPromises = selectedAgents.map((agent, i) => {
         const key = keys[i % keys.length];
         return runChatAgent(
@@ -550,7 +548,8 @@ router.post(
         content,
         contextStr,
         historyStr,
-        sendEvent
+        sendEvent,
+        synthesisKey
       );
 
       if (aborted) {
