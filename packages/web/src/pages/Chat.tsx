@@ -943,15 +943,14 @@ export default function Chat() {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar — mobile: fixed overlay when open, hidden when closed; desktop: inline push */}
       <div
         className={`
-          fixed inset-y-0 left-0 z-40 w-72
-          transform transition-transform duration-200 ease-in-out
-          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:static lg:z-auto lg:transform-none
-          ${sidebarOpen ? 'lg:w-72' : 'lg:w-0 lg:overflow-hidden'}
-          flex-shrink-0 border-r border-gray-200 bg-gray-50
+          ${sidebarOpen
+            ? 'fixed inset-y-0 left-0 z-40 w-72 lg:static lg:z-auto'
+            : 'hidden lg:block lg:w-0 lg:overflow-hidden'
+          }
+          flex-shrink-0 border-r border-gray-200 bg-gray-50 transition-[width] duration-200
         `}
       >
         <div className="w-72 h-full flex flex-col">
