@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
-import { AGENTS, MASTER_AGENT_PROMPT, AgentPersona } from "../ai/agents.js";
+import { AGENTS, AgentPersona } from "../ai/agents.js";
 import { withGeminiRetry } from "../ai/geminiRetry.js";
 import { assignBatchKeys, trackUsageByKey } from "../ai/keyPool.js";
-import { selectAgents } from "../ai/diaryAnalyzer.js";
+import { analyzeIntent, IntentResult } from "../ai/intentAnalyzer.js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const router = Router();
@@ -17,49 +17,6 @@ function sseWrite(res: Response, event: Record<string, any>): void {
   }
 }
 
-// ── Agent selection for chat ─────────────────────────────────────────
-
-function selectChatAgents(message: string, context: string): AgentPersona[] {
-  const text = `${message} ${context}`.toLowerCase();
-  const scored = Object.values(AGENTS).map((agent) => {
-    const score = agent.topics.reduce((sum, topic) => {
-      return sum + (text.includes(topic) ? 1 : 0);
-    }, 0);
-    return { agent, score };
-  });
-
-  // Emotional keywords trigger xiaoyu
-  const emotionalKeywords = [
-    "情緒", "心情", "壓力", "焦慮", "開心", "難過", "憂鬱",
-    "孤獨", "感恩", "哭", "淚", "累", "煩", "怕", "傷心",
-    "生氣", "沮喪", "快樂", "幸福", "感動",
-  ];
-  const hasEmotion = emotionalKeywords.some((kw) => text.includes(kw));
-
-  const selected = scored.filter(
-    (s) => s.score > 0 || (hasEmotion && s.agent.id === "xiaoyu")
-  );
-
-  // Always include at least azhe as default
-  if (!selected.find((s) => s.agent.id === "azhe")) {
-    const azhe = Object.values(AGENTS).find((a) => a.id === "azhe")!;
-    selected.push({ agent: azhe, score: 0 });
-  }
-
-  // If only 1 agent, add xiaoyu as second
-  if (selected.length < 2) {
-    if (!selected.find((s) => s.agent.id === "xiaoyu")) {
-      const xiaoyu = Object.values(AGENTS).find((a) => a.id === "xiaoyu")!;
-      selected.push({ agent: xiaoyu, score: 0 });
-    }
-  }
-
-  // Max 3 agents for chat (keep it snappy)
-  return selected
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3)
-    .map((s) => s.agent);
-}
 
 // ── Run a single agent in chat mode ──────────────────────────────────
 
@@ -145,14 +102,20 @@ ${agent.systemPrompt}
 
 const MASTER_CHAT_PROMPT = `你是心靈日記的 AI 助手，正在和使用者對話。多位 AI 好友已經各自分析了使用者的訊息。
 
-請根據他們的分析，以及相關的資料庫搜尋結果，產出一段自然流暢的回覆。
+請根據他們的分析，以及相關的資料庫搜尋結果，以每位好友的身份分別回覆。
 
 規則：
 - 繁體中文
-- 自然對話口吻，像朋友聊天
-- 融合各好友的觀點但不要提到他們的名字
+- 每位好友各自用自己的口吻回應 1-3 句話
+- 保持每位好友的個性和風格
 - 如果有參考到使用者的日記或檔案，自然提及
-- 長度適中（3-8句話）`;
+- 輸出格式必須是：
+
+{emoji} {名字}：[用該好友的口吻回應]
+
+{emoji} {名字}：[用該好友的口吻回應]
+
+（每位好友之間空一行）`;
 
 async function synthesizeChat(
   agentResults: Array<{ agentId: string; result: string }>,
@@ -170,6 +133,13 @@ async function synthesizeChat(
     })
     .join("\n\n");
 
+  const agentFormatHint = agentResults
+    .map((r) => {
+      const agent = AGENTS[r.agentId];
+      return `${agent.emoji} ${agent.name}`;
+    })
+    .join("、");
+
   const result = await withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
@@ -186,6 +156,7 @@ async function synthesizeChat(
       prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
     }
     prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
+    prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
 
     let fullText = "";
     const streamResult = await model.generateContentStream(prompt);
@@ -486,8 +457,56 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
 
-      // 4. Select agents
-      const selectedAgents = selectAgents(`${content} ${contextStr}`, 3);
+      // 4. AI intent analysis to select agents
+      sendEvent({ type: "phase", phase: "analyzing", message: "分析意圖中..." });
+
+      const availableAgentList = Object.values(AGENTS).map((a) => ({
+        id: a.id,
+        name: a.name,
+        emoji: a.emoji,
+        role: a.role,
+        description: a.description,
+      }));
+
+      let intentResult: IntentResult;
+      try {
+        intentResult = await analyzeIntent(content, historyStr, availableAgentList);
+      } catch (err) {
+        console.warn("[chat] Intent analysis failed, using defaults:", err);
+        intentResult = {
+          agents: [
+            { id: "xiaoyu", reason: "提供情緒支持和共感回應" },
+            { id: "azhe", reason: "提供理性分析和建議" },
+          ],
+          summary: "根據你的訊息，我請了小語和阿哲來聊聊",
+        };
+      }
+
+      // Build reasons map for the intent event
+      const reasonsMap: Record<string, string> = {};
+      for (const a of intentResult.agents) {
+        reasonsMap[a.id] = a.reason;
+      }
+
+      sendEvent({
+        type: "intent",
+        agents: intentResult.agents.map((a) => {
+          const agent = AGENTS[a.id];
+          return {
+            id: a.id,
+            name: agent?.name || a.id,
+            emoji: agent?.emoji || "🤖",
+            role: agent?.role || "",
+            reason: a.reason,
+          };
+        }),
+        reasons: reasonsMap,
+        summary: intentResult.summary,
+      });
+
+      const selectedAgents = intentResult.agents
+        .map((a) => AGENTS[a.id])
+        .filter((a): a is AgentPersona => !!a);
 
       sendEvent({
         type: "phase",
@@ -552,12 +571,26 @@ router.post(
         return;
       }
 
-      // 7. Save assistant message
+      // 7. Save assistant message with ai_agents and dispatch_reason
+      const aiAgentsJson = JSON.stringify(
+        intentResult.agents.map((a) => {
+          const agent = AGENTS[a.id];
+          return {
+            id: a.id,
+            name: agent?.name || a.id,
+            emoji: agent?.emoji || "🤖",
+            role: agent?.role || "",
+            reason: a.reason,
+          };
+        })
+      );
+      const dispatchReason = intentResult.summary;
+
       const result = sqlite
         .prepare(
-          "INSERT INTO chat_messages (session_id, role, content) VALUES (?, 'assistant', ?)"
+          "INSERT INTO chat_messages (session_id, role, content, ai_agents, dispatch_reason) VALUES (?, 'assistant', ?, ?, ?)"
         )
-        .run(sessionId, aiResponse);
+        .run(sessionId, aiResponse, aiAgentsJson, dispatchReason);
 
       const assistantMessage = sqlite
         .prepare("SELECT * FROM chat_messages WHERE id = ?")
@@ -565,6 +598,8 @@ router.post(
         id: number;
         role: string;
         content: string;
+        ai_agents: string | null;
+        dispatch_reason: string | null;
         created_at: string;
       };
 
@@ -575,6 +610,8 @@ router.post(
           id: assistantMessage.id,
           role: assistantMessage.role,
           content: assistantMessage.content,
+          ai_agents: assistantMessage.ai_agents,
+          dispatch_reason: assistantMessage.dispatch_reason,
           created_at: assistantMessage.created_at,
         },
       });
@@ -606,7 +643,7 @@ router.get("/sessions/:id/messages", (req: Request, res: Response) => {
 
     const messages = sqlite
       .prepare(
-        "SELECT * FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC"
+        "SELECT id, session_id, role, content, ai_agents, dispatch_reason, created_at FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC"
       )
       .all(sessionId);
 

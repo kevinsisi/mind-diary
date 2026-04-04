@@ -144,5 +144,14 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  // Add ai_agents and dispatch_reason to chat_messages if they don't exist
+  const chatMsgCols = db.prepare("PRAGMA table_info(chat_messages)").all() as any[];
+  if (!chatMsgCols.some((c: any) => c.name === 'ai_agents')) {
+    db.exec("ALTER TABLE chat_messages ADD COLUMN ai_agents TEXT");
+  }
+  if (!chatMsgCols.some((c: any) => c.name === 'dispatch_reason')) {
+    db.exec("ALTER TABLE chat_messages ADD COLUMN dispatch_reason TEXT");
+  }
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

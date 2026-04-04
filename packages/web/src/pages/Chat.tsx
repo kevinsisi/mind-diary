@@ -38,6 +38,8 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  ai_agents?: string;
+  dispatch_reason?: string;
 }
 
 interface AgentThinkingState {
@@ -53,19 +55,98 @@ interface ThinkingData {
   synthesisText: string;
   phase: string;
   collapsed: boolean;
+  dispatchSummary: string;
+  agentReasons: Record<string, string>;
 }
 
 interface ChatSSEEvent {
-  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'complete' | 'error';
+  type: 'phase' | 'agent-start' | 'agent-thinking' | 'agent-done' | 'synthesizing' | 'complete' | 'error' | 'intent';
   phase?: string;
-  message?: string | { id: number; role: string; content: string; created_at: string };
+  message?: string | { id: number; role: string; content: string; created_at: string; ai_agents?: string; dispatch_reason?: string };
   agentId?: string;
   agentName?: string;
   agentEmoji?: string;
   agentRole?: string;
   content?: string;
   agents?: Array<{ id: string; name: string; emoji: string; role: string }>;
+  reasons?: Record<string, string>;
+  summary?: string;
 }
+
+// ── Agent Color Map ──────────────────────────────────────────────
+
+const AGENT_COLORS: Record<string, string> = {
+  xiaoyu: '#a855f7',   // purple
+  azhe: '#14b8a6',     // teal
+  xiaoxing: '#f59e0b', // amber
+  xinxin: '#ec4899',   // pink
+  dran: '#3b82f6',     // blue
+};
+
+function getAgentColor(name: string): string {
+  // Try to match by known agent names in Chinese
+  const nameMap: Record<string, string> = {
+    '小語': 'xiaoyu',
+    '阿哲': 'azhe',
+    '小星': 'xiaoxing',
+    '心心': 'xinxin',
+    '阿丹': 'dran',
+  };
+  const agentId = nameMap[name];
+  if (agentId && AGENT_COLORS[agentId]) return AGENT_COLORS[agentId];
+  // Fallback: hash-based color
+  const colors = Object.values(AGENT_COLORS);
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+}
+
+// ── Agent Response Parser ────────────────────────────────────────
+
+interface ParsedAgentResponse {
+  emoji: string;
+  name: string;
+  text: string;
+}
+
+function parseAgentResponses(content: string): ParsedAgentResponse[] | null {
+  // Match patterns like "💜 小語：[response]" separated by double newlines
+  const agentPattern = /^([^\s]+)\s+([^\s：:]+)[：:](.+?)(?=\n[^\s]+\s+[^\s：:]+[：:]|\s*$)/gms;
+  const results: ParsedAgentResponse[] = [];
+
+  // Split by agent headers: emoji + name + colon
+  const sections = content.split(/(?=^[^\n]*?[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FEFF}]\s+[^\s：:]+[：:])/um);
+
+  for (const section of sections) {
+    const trimmed = section.trim();
+    if (!trimmed) continue;
+
+    // Try to match "emoji name：content"
+    const match = trimmed.match(/^([^\s]+)\s+([^\s：:]+)[：:]\s*([\s\S]*)$/);
+    if (match) {
+      results.push({
+        emoji: match[1],
+        name: match[2],
+        text: match[3].trim(),
+      });
+    }
+  }
+
+  // If we couldn't parse any agents, return null for fallback
+  if (results.length === 0) return null;
+  // Only treat as agent format if we found at least 1 agent
+  return results;
+}
+
+// ── Agent Role Map ───────────────────────────────────────────────
+
+const AGENT_ROLES: Record<string, string> = {
+  '小語': '心靈夥伴',
+  '阿哲': '人生導師',
+  '小星': '創意靈感',
+  '心心': '溫暖陪伴',
+  '阿丹': '理性分析',
+};
 
 // ── ThinkingCard Component ────────────────────────────────────────
 
@@ -89,7 +170,7 @@ function ThinkingCard({
       <div className="flex justify-start my-2">
         <button
           onClick={onToggle}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] text-xs sm:text-sm text-gray-500 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 rounded-lg transition-colors"
         >
           <ChevronRight size={14} />
           <span>
@@ -104,13 +185,20 @@ function ThinkingCard({
 
   return (
     <div className="flex justify-start my-2">
-      <div className="max-w-[85%] w-full">
+      <div className="max-w-full lg:max-w-[85%] w-full">
         <div className="rounded-xl border border-gray-200 bg-gray-50/80 overflow-hidden">
           {/* Phase indicator */}
           {thinking.phase && (
             <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
               {isStreaming && <Loader2 size={12} className="animate-spin text-indigo-500" />}
-              <span className="text-xs text-indigo-600 font-medium">{thinking.phase}</span>
+              <span className="text-sm lg:text-xs text-indigo-600 font-medium">{thinking.phase}</span>
+            </div>
+          )}
+
+          {/* Dispatch summary */}
+          {thinking.dispatchSummary && (
+            <div className="px-3 py-2 border-b border-gray-100 text-xs text-gray-500 italic">
+              {thinking.dispatchSummary}
             </div>
           )}
 
@@ -118,16 +206,21 @@ function ThinkingCard({
           <div className="p-2 space-y-1.5">
             {agentEntries.map(([id, agent]) => (
               <div key={id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border-b border-gray-100 min-h-[44px]">
                   <span>{agent.emoji}</span>
                   <span className="text-xs font-medium text-gray-900">{agent.name}</span>
                   <span className="text-xs text-gray-400">{agent.role}</span>
+                  {thinking.agentReasons[id] && (
+                    <span className="text-[10px] text-gray-400 italic ml-1 truncate hidden sm:inline">
+                      — {thinking.agentReasons[id]}
+                    </span>
+                  )}
                   {!agent.done && isStreaming && (
                     <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />
                   )}
                   {agent.done && <span className="text-xs text-green-500 ml-auto">&#10003;</span>}
                 </div>
-                <div className="px-3 py-1.5 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-24 overflow-y-auto">
+                <div className="px-3 py-1.5 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
                   {agent.text || <span className="text-gray-300 italic">思考中...</span>}
                 </div>
               </div>
@@ -144,7 +237,7 @@ function ThinkingCard({
                     <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />
                   )}
                 </div>
-                <div className="px-3 py-1.5 text-xs text-indigo-800 leading-relaxed whitespace-pre-line max-h-24 overflow-y-auto">
+                <div className="px-3 py-1.5 text-xs text-indigo-800 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
                   {thinking.synthesisText}
                 </div>
               </div>
@@ -155,12 +248,123 @@ function ThinkingCard({
           {!isStreaming && agentCount > 0 && (
             <button
               onClick={onToggle}
-              className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 hover:bg-gray-100 transition-colors"
+              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 min-h-[44px] text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 hover:bg-gray-100 transition-colors"
             >
               <ChevronDown size={14} />
               收起思考過程
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── AgentMessageCard Component ───────────────────────────────────
+
+function AgentMessageCard({
+  agent,
+  reason,
+}: {
+  agent: ParsedAgentResponse;
+  reason?: string;
+}) {
+  const color = getAgentColor(agent.name);
+  const role = AGENT_ROLES[agent.name] || '';
+
+  return (
+    <div
+      className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden"
+      style={{ borderLeftWidth: '4px', borderLeftColor: color }}
+    >
+      {/* Agent header */}
+      <div className="px-3 py-2 flex items-center gap-2">
+        <span className="text-base">{agent.emoji}</span>
+        <span className="text-sm font-semibold text-gray-900">{agent.name}</span>
+        {role && <span className="text-xs text-gray-400">· {role}</span>}
+      </div>
+
+      {/* Reason */}
+      {reason && (
+        <div className="px-3 pb-1 text-xs text-gray-400 italic">
+          「{reason}」
+        </div>
+      )}
+
+      {/* Response content */}
+      <div className="px-3 pb-3 text-sm text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
+        {agent.text}
+      </div>
+    </div>
+  );
+}
+
+// ── AssistantMessage Component ────────────────────────────────────
+
+function AssistantMessage({
+  msg,
+  formatTime,
+}: {
+  msg: Message;
+  formatTime: (dateStr: string) => string;
+}) {
+  // Try to parse agent responses from content
+  const parsed = parseAgentResponses(msg.content);
+
+  // Parse ai_agents data for reasons
+  let agentReasonsMap: Record<string, string> = {};
+  if (msg.ai_agents) {
+    try {
+      const agentsData = JSON.parse(msg.ai_agents);
+      if (Array.isArray(agentsData)) {
+        for (const a of agentsData) {
+          if (a.name && a.reason) agentReasonsMap[a.name] = a.reason;
+        }
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }
+
+  // New agent card format
+  if (parsed && parsed.length > 0) {
+    return (
+      <div className="flex justify-start">
+        <div className="max-w-full lg:max-w-3xl w-full space-y-2">
+          {/* Dispatch reason */}
+          {msg.dispatch_reason && (
+            <div className="text-xs text-gray-400 px-1 py-1 leading-relaxed">
+              {msg.dispatch_reason}
+            </div>
+          )}
+
+          {/* Agent cards */}
+          {parsed.map((agent, idx) => (
+            <AgentMessageCard
+              key={idx}
+              agent={agent}
+              reason={agentReasonsMap[agent.name]}
+            />
+          ))}
+
+          {/* Timestamp */}
+          <div className="text-xs text-gray-400 px-1">
+            {formatTime(msg.created_at)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: plain bubble for old messages
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 text-gray-800 rounded-bl-md">
+        <div className="whitespace-pre-wrap break-words">
+          {msg.content}
+        </div>
+        <div className="text-xs mt-1.5 text-gray-400">
+          {formatTime(msg.created_at)}
         </div>
       </div>
     </div>
@@ -281,7 +485,7 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [sendingMessage, setSendingMessage] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false); // default closed on mobile
 
   // Folder state
   const [folders, setFolders] = useState<ChatFolder[]>([]);
@@ -297,6 +501,13 @@ export default function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Detect desktop on mount to auto-open sidebar
+  useEffect(() => {
+    if (window.innerWidth >= 1024) {
+      setSidebarOpen(true);
+    }
+  }, []);
 
   // Close move dropdown on outside click
   useEffect(() => {
@@ -387,6 +598,8 @@ export default function Chat() {
       setSessions((prev) => [session, ...prev]);
       setActiveSessionId(session.id);
       setMessages([]);
+      // Close sidebar on mobile after creating
+      if (window.innerWidth < 1024) setSidebarOpen(false);
       inputRef.current?.focus();
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -462,6 +675,15 @@ export default function Chat() {
     });
   };
 
+  // ── Select session (auto-close sidebar on mobile) ───────────────
+
+  const selectSession = (sessionId: number) => {
+    setActiveSessionId(sessionId);
+    if (window.innerWidth < 1024) {
+      setSidebarOpen(false);
+    }
+  };
+
   // ── Group sessions by folder ────────────────────────────────────
 
   const sessionsByFolder = (() => {
@@ -514,6 +736,8 @@ export default function Chat() {
       synthesisText: '',
       phase: '',
       collapsed: false,
+      dispatchSummary: '',
+      agentReasons: {},
     };
     setCurrentThinking(thinking);
 
@@ -543,7 +767,16 @@ export default function Chat() {
           try {
             const event: ChatSSEEvent = JSON.parse(line.slice(6));
 
-            if (event.type === 'phase') {
+            if (event.type === 'intent') {
+              setCurrentThinking((prev) => {
+                if (!prev) return prev;
+                return {
+                  ...prev,
+                  dispatchSummary: event.summary || prev.dispatchSummary,
+                  agentReasons: event.reasons || prev.agentReasons,
+                };
+              });
+            } else if (event.type === 'phase') {
               setCurrentThinking((prev) => {
                 if (!prev) return prev;
                 return { ...prev, phase: (typeof event.message === 'string' ? event.message : event.phase) || '' };
@@ -606,14 +839,12 @@ export default function Chat() {
                   role: msg.role as 'assistant',
                   content: msg.content,
                   created_at: msg.created_at,
+                  ai_agents: msg.ai_agents,
+                  dispatch_reason: msg.dispatch_reason,
                 };
 
-                // Replace temp user message with real user message if available,
-                // and add assistant message
-                setMessages((prev) => {
-                  // Keep existing messages (including temp user msg) and add assistant
-                  return [...prev, assistantMsg];
-                });
+                // Keep existing messages (including temp user msg) and add assistant
+                setMessages((prev) => [...prev, assistantMsg]);
 
                 // Store thinking data for this assistant message, auto-collapsed
                 setCurrentThinking((prev) => {
@@ -703,24 +934,46 @@ export default function Chat() {
   // ── Render ──────────────────────────────────────────────────────
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-4rem)] lg:h-screen">
+    <div className="-m-6 flex h-[calc(100vh-4rem)] lg:h-screen relative">
+      {/* Mobile backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-30 lg:hidden transition-opacity duration-200"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
       <div
-        className={`${
-          sidebarOpen ? 'w-72' : 'w-0'
-        } flex-shrink-0 transition-all duration-200 overflow-hidden border-r border-gray-200 bg-gray-50`}
+        className={`
+          fixed inset-y-0 left-0 z-40 w-72
+          transform transition-transform duration-200 ease-in-out
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+          lg:static lg:z-auto lg:transform-none
+          ${sidebarOpen ? 'lg:w-72' : 'lg:w-0 lg:overflow-hidden'}
+          flex-shrink-0 border-r border-gray-200 bg-gray-50
+        `}
       >
         <div className="w-72 h-full flex flex-col">
           {/* Sidebar header */}
           <div className="flex items-center justify-between p-3 border-b border-gray-200">
             <h2 className="text-sm font-semibold text-gray-700">對話紀錄</h2>
-            <button
-              onClick={createSession}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              <Plus size={14} />
-              新增對話
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={createSession}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              >
+                <Plus size={14} />
+                新增對話
+              </button>
+              {/* Close button on mobile */}
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
           </div>
 
           {/* New folder button / input */}
@@ -793,7 +1046,7 @@ export default function Chat() {
                       isMoving={movingSessionId === session.id}
                       folders={folders}
                       indented
-                      onSelect={() => setActiveSessionId(session.id)}
+                      onSelect={() => selectSession(session.id)}
                       onDelete={(e) => deleteSession(session.id, e)}
                       onMoveStart={() => setMovingSessionId(session.id)}
                       onMoveEnd={() => setMovingSessionId(null)}
@@ -821,7 +1074,7 @@ export default function Chat() {
                     isMoving={movingSessionId === session.id}
                     folders={folders}
                     indented={false}
-                    onSelect={() => setActiveSessionId(session.id)}
+                    onSelect={() => selectSession(session.id)}
                     onDelete={(e) => deleteSession(session.id, e)}
                     onMoveStart={() => setMovingSessionId(session.id)}
                     onMoveEnd={() => setMovingSessionId(null)}
@@ -838,7 +1091,7 @@ export default function Chat() {
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Chat header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
+        <div className="flex items-center gap-3 px-3 lg:px-4 py-3 border-b border-gray-200 bg-white">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
@@ -846,7 +1099,7 @@ export default function Chat() {
           >
             {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
-          <h2 className="text-sm font-semibold text-gray-700">
+          <h2 className="text-sm font-semibold text-gray-700 truncate">
             {activeSessionId
               ? sessions.find((s) => s.id === activeSessionId)?.title || '對話'
               : 'AI 對話'}
@@ -855,9 +1108,9 @@ export default function Chat() {
 
         {/* Messages or empty state */}
         {!activeSessionId ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
-            <MessageCircle size={48} strokeWidth={1.5} />
-            <p className="mt-4 text-lg">選擇或建立一個對話</p>
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 px-4">
+            <MessageCircle size={36} className="lg:w-12 lg:h-12" strokeWidth={1.5} />
+            <p className="mt-3 text-base lg:text-lg">選擇或建立對話</p>
             <button
               onClick={createSession}
               className="mt-4 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
@@ -868,18 +1121,18 @@ export default function Chat() {
         ) : (
           <>
             {/* Messages list */}
-            <div className="flex-1 overflow-y-auto px-4 py-6">
+            <div className="flex-1 overflow-y-auto px-3 py-4 lg:px-4 lg:py-6">
               {loading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader2 size={24} className="animate-spin text-indigo-500" />
                 </div>
               ) : messages.length === 0 && !sendingMessage ? (
                 <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                  <MessageCircle size={36} strokeWidth={1.5} />
-                  <p className="mt-3 text-sm">開始你的對話吧</p>
+                  <MessageCircle size={32} className="lg:w-9 lg:h-9" strokeWidth={1.5} />
+                  <p className="mt-3 text-sm">開始對話吧</p>
                 </div>
               ) : (
-                <div className="max-w-3xl mx-auto space-y-4">
+                <div className="max-w-full lg:max-w-3xl mx-auto space-y-4">
                   {messages.map((msg) => (
                     <div key={msg.id}>
                       {/* Thinking card rendered before assistant message */}
@@ -891,29 +1144,21 @@ export default function Chat() {
                         />
                       )}
 
-                      {/* Message bubble */}
-                      <div
-                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                            msg.role === 'user'
-                              ? 'bg-indigo-600 text-white rounded-br-md'
-                              : 'bg-gray-100 text-gray-800 rounded-bl-md'
-                          }`}
-                        >
-                          <div className="whitespace-pre-wrap break-words">
-                            {msg.content}
-                          </div>
-                          <div
-                            className={`text-xs mt-1.5 ${
-                              msg.role === 'user' ? 'text-indigo-200' : 'text-gray-400'
-                            }`}
-                          >
-                            {formatTime(msg.created_at)}
+                      {/* Message */}
+                      {msg.role === 'user' ? (
+                        <div className="flex justify-end">
+                          <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-indigo-600 text-white rounded-br-md">
+                            <div className="whitespace-pre-wrap break-words">
+                              {msg.content}
+                            </div>
+                            <div className="text-xs mt-1.5 text-indigo-200">
+                              {formatTime(msg.created_at)}
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      ) : (
+                        <AssistantMessage msg={msg} formatTime={formatTime} />
+                      )}
                     </div>
                   ))}
 
@@ -944,16 +1189,16 @@ export default function Chat() {
             </div>
 
             {/* Input bar */}
-            <div className="border-t border-gray-200 bg-white px-4 py-3">
-              <div className="max-w-3xl mx-auto flex items-end gap-3">
+            <div className="border-t border-gray-200 bg-white px-3 lg:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+              <div className="max-w-full lg:max-w-3xl mx-auto flex items-end gap-2 lg:gap-3">
                 <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="輸入訊息... (Enter 發送, Shift+Enter 換行)"
+                  placeholder="輸入訊息..."
                   rows={1}
-                  className="flex-1 resize-none rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
+                  className="flex-1 resize-none rounded-xl border border-gray-300 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
                   style={{
                     height: 'auto',
                     minHeight: '2.75rem',
@@ -968,7 +1213,7 @@ export default function Chat() {
                 <button
                   onClick={sendMessage}
                   disabled={!input.trim() || sendingMessage}
-                  className="flex-shrink-0 p-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                   title="發送訊息"
                 >
                   {sendingMessage ? (
