@@ -62,15 +62,22 @@ async function callGeminiWithRetry(
   maxTokens: number,
   maxRetries: number = 3,
   callType: string = "chat",
+  disableThinking: boolean = false,
 ): Promise<string> {
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
   return withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
+    const generationConfig: Record<string, any> = { maxOutputTokens: maxTokens };
+    // thinkingBudget:0 disables the thinking step so output is never truncated by thinking tokens.
+    // Required for short-output tasks (title generation) with gemini-2.5-flash thinking model.
+    if (disableThinking) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
     const model = genai.getGenerativeModel({
       model: modelName,
       systemInstruction: systemPrompt,
-      generationConfig: { maxOutputTokens: maxTokens },
+      generationConfig,
     });
 
     const timeout = new Promise<never>((_, reject) =>
@@ -595,20 +602,27 @@ router.post(
         (async () => {
           try {
             const titleContext = `使用者：${content.slice(0, 300)}\n\nAI 回覆：${aiResponse.slice(0, 500)}`;
+            console.log('[chat-title] Generating title for session', sessionId);
             const aiTitle = await callGeminiWithRetry(
               '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
               titleContext,
-              800,
+              200,
               2,
               'chat-title',
+              true, // disableThinking: prevents thinking tokens from consuming the output budget
             );
             const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
+            console.log('[chat-title] Generated:', JSON.stringify(cleanTitle), '| raw length:', aiTitle.length);
             if (cleanTitle) {
               sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(cleanTitle, sessionId);
               sseWrite(res, { type: 'title-updated', sessionId, title: cleanTitle });
+            } else {
+              console.warn('[chat-title] Empty title after cleaning, falling back');
+              throw new Error('empty title');
             }
-          } catch {
+          } catch (titleErr) {
             // Fallback: use truncated user content
+            console.error('[chat-title] Title generation failed, using fallback:', (titleErr as Error).message);
             const fallback = content.slice(0, 20) + (content.length > 20 ? '...' : '');
             sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallback, sessionId);
             sseWrite(res, { type: 'title-updated', sessionId, title: fallback });
