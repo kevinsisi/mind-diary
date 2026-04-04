@@ -28,7 +28,7 @@ export default function AdminUsersPage() {
 
   async function loadUsers() {
     try {
-      const data = await apiClient.get<UserRecord[]>('/api/users');
+      const data = await apiClient.get<UserRecord[]>('/api/auth/users');
       setUsers(data);
     } catch {
       setError('無法載入使用者清單');
@@ -51,7 +51,7 @@ export default function AdminUsersPage() {
     setError('');
     setCreating(true);
     try {
-      await apiClient.post('/api/users', { username: newUsername, password: newPassword, role: newRole });
+      await apiClient.post('/api/auth/users', { username: newUsername, password: newPassword, role: newRole });
       setNewUsername('');
       setNewPassword('');
       setNewRole('user');
@@ -69,7 +69,7 @@ export default function AdminUsersPage() {
     if (!confirm(`確定要刪除使用者「${user.username}」？此操作無法復原。`)) return;
     setError('');
     try {
-      await apiClient.delete(`/api/users/${user.id}`);
+      await apiClient.delete(`/api/auth/users/${user.id}`);
       notify('使用者已刪除');
       await loadUsers();
     } catch (err: unknown) {
@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
     setError('');
     setResetting(true);
     try {
-      await apiClient.post(`/api/users/${resetTarget.id}/password`, { password: resetPassword });
+      await apiClient.patch(`/api/auth/users/${resetTarget.id}`, { password: resetPassword });
       setResetTarget(null);
       setResetPassword('');
       notify('密碼已重設');
