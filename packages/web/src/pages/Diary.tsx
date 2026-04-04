@@ -268,6 +268,7 @@ export default function Diary() {
   const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
   const [uploadingImages, setUploadingImages] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const mobileImageInputRef = useRef<HTMLInputElement>(null);
 
   // Loading
   const [loading, setLoading] = useState(false);
@@ -1361,7 +1362,7 @@ export default function Diary() {
 
       {/* ── Mobile Edit Overlay ─────────────────────────────────── */}
       {editMode && (
-        <div className="fixed inset-0 z-40 bg-white flex flex-col lg:hidden">
+        <div className="fixed inset-0 z-40 bg-white flex flex-col lg:hidden" onPaste={handleEditPaste}>
           <div className="flex items-center justify-between p-4 border-b border-gray-100">
             <h3 className="font-semibold text-gray-900">
               {isNew ? '新增日記' : '編輯日記'}
@@ -1474,6 +1475,80 @@ export default function Diary() {
                 </div>
               </div>
             )}
+
+            {/* Images */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">圖片</label>
+
+              {/* Existing images (edit mode) */}
+              {!isNew && selectedEntry?.images && selectedEntry.images.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {selectedEntry.images.map(img => (
+                    <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <img src={img.url} alt={img.filename} className="w-full h-full object-cover" />
+                      <button
+                        onClick={() => handleDeleteImage(img.id)}
+                        className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pending image previews */}
+              {pendingPreviews.length > 0 && (
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {pendingPreviews.map((url, i) => (
+                    <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
+                        <span className="text-[10px] text-indigo-700 bg-white/80 px-1.5 py-0.5 rounded font-medium">待上傳</span>
+                      </div>
+                      <button
+                        onClick={() => removePendingImage(i)}
+                        className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X size={11} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Drop zone */}
+              <div
+                role="button"
+                tabIndex={0}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); addPendingImages(e.dataTransfer.files); }}
+                onClick={() => mobileImageInputRef.current?.click()}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') mobileImageInputRef.current?.click(); }}
+                className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+              >
+                {uploadingImages ? (
+                  <div className="flex items-center justify-center gap-2 text-indigo-500">
+                    <Loader2 size={18} className="animate-spin" />
+                    <span className="text-sm">上傳中...</span>
+                  </div>
+                ) : (
+                  <>
+                    <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300" />
+                    <p className="text-sm text-gray-400">拖放、點擊或貼上圖片 (Ctrl+V)</p>
+                    <p className="text-xs text-gray-300 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
+                  </>
+                )}
+              </div>
+              <input
+                ref={mobileImageInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                multiple
+                className="hidden"
+                onChange={e => { if (e.target.files) addPendingImages(e.target.files); e.target.value = ''; }}
+              />
+            </div>
           </div>
         </div>
       )}
