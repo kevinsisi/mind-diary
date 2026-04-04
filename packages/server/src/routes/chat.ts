@@ -54,7 +54,7 @@ ${agent.systemPrompt}
   const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   let fullText = "";
 
-  // Use the batch-assigned key directly with a 30s timeout via AbortController
+  // Use non-streaming API (generateContentStream hangs on gemini-2.5-flash)
   const apiKey = _apiKey;
   const genai = new GoogleGenerativeAI(apiKey);
   const geminiModel = genai.getGenerativeModel({
@@ -63,36 +63,23 @@ ${agent.systemPrompt}
     generationConfig: { maxOutputTokens: 300 },
   });
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 30000);
+  const response = await geminiModel.generateContent(prompt);
+  fullText = response.response.text();
 
-  try {
-    const streamResult = await geminiModel.generateContentStream(
-      { contents: [{ role: "user", parts: [{ text: prompt }] }] },
-      { signal: controller.signal } as any,
-    );
+  // Send the full result as a single "thinking" event
+  if (fullText) {
+    onEvent({
+      type: "agent-thinking",
+      agentId: agent.id,
+      agentName: agent.name,
+      agentEmoji: agent.emoji,
+      content: fullText,
+    });
+  }
 
-    for await (const chunk of streamResult.stream) {
-      const text = chunk.text();
-      if (text) {
-        fullText += text;
-        onEvent({
-          type: "agent-thinking",
-          agentId: agent.id,
-          agentName: agent.name,
-          agentEmoji: agent.emoji,
-          content: text,
-        });
-      }
-    }
-
-    const response = await streamResult.response;
-    const usage = response.usageMetadata;
-    if (usage) {
-      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
-    }
-  } finally {
-    clearTimeout(timeoutId);
+  const usage = response.response.usageMetadata;
+  if (usage) {
+    trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, "chat-agent");
   }
 
   onEvent({
@@ -170,18 +157,11 @@ async function synthesizeChat(
     prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
     prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話。`;
 
-    let fullText = "";
-    const streamResult = await model.generateContentStream(prompt);
-    for await (const chunk of streamResult.stream) {
-      const text = chunk.text();
-      if (text) {
-        fullText += text;
-        onEvent({ type: "synthesizing", content: text });
-      }
-    }
+    const response = await model.generateContent(prompt);
+    const fullText = response.response.text();
+    onEvent({ type: "synthesizing", content: fullText });
 
-    const response = await streamResult.response;
-    const usage = response.usageMetadata;
+    const usage = response.response.usageMetadata;
     if (usage) {
       trackUsageByKey(
         apiKey,
