@@ -473,7 +473,7 @@ function SessionItem({
               if (e.key === 'Enter') commitEdit();
               if (e.key === 'Escape') setEditing(false);
             }}
-            className="w-full text-xs font-medium bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-indigo-400 rounded px-1.5 py-1 focus:outline-none"
+            className="w-full text-base lg:text-xs font-medium bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-indigo-400 rounded px-1.5 py-1 focus:outline-none"
           />
         </div>
       ) : (
@@ -1247,7 +1247,7 @@ export default function Chat() {
                     if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
                   }}
                   placeholder="資料夾名稱"
-                  className="flex-1 min-w-0 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="flex-1 min-w-0 text-base lg:text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                 />
                 <button onClick={createFolder} className="p-1 text-indigo-600 hover:text-indigo-800" title="確認"><Plus size={14} /></button>
                 <button onClick={() => { setShowNewFolder(false); setNewFolderName(''); }} className="p-1 text-gray-400 hover:text-gray-600" title="取消"><X size={14} /></button>
@@ -1509,7 +1509,7 @@ export default function Chat() {
                     onPaste={handleInputPaste}
                     placeholder={chatImage ? '補充圖片說明（可選）...' : '輸入訊息或貼上圖片...'}
                     rows={1}
-                    className="flex-1 resize-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
+                    className="flex-1 resize-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 lg:px-4 py-2.5 text-base lg:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
                     style={{ height: 'auto', minHeight: '2.75rem' }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;
