@@ -975,7 +975,8 @@ export default function Chat() {
 
             if (event.type === 'intent') {
               setCurrentThinking((prev) => {
-                if (!prev) return prev;
+                // Re-initialize if null (e.g. race condition when auto-creating new session)
+                const base: ThinkingData = prev || { agents: {}, synthesisText: '', phase: '', collapsed: false, dispatchSummary: '', agentReasons: {} };
                 // Pre-populate agent cards from intent so reasoning shows immediately
                 const prePopulated: Record<string, AgentThinkingState> = {};
                 if (event.agents) {
@@ -990,16 +991,17 @@ export default function Chat() {
                   }
                 }
                 return {
-                  ...prev,
-                  dispatchSummary: event.summary || prev.dispatchSummary,
-                  agentReasons: event.reasons || prev.agentReasons,
-                  agents: { ...prePopulated, ...prev.agents },
+                  ...base,
+                  dispatchSummary: event.summary || base.dispatchSummary,
+                  agentReasons: event.reasons || base.agentReasons,
+                  agents: { ...prePopulated, ...base.agents },
                 };
               });
             } else if (event.type === 'phase') {
               setCurrentThinking((prev) => {
-                if (!prev) return prev;
-                return { ...prev, phase: (typeof event.message === 'string' ? event.message : event.phase) || '' };
+                // Re-initialize if null (race condition with new session creation)
+                const base: ThinkingData = prev || { agents: {}, synthesisText: '', phase: '', collapsed: false, dispatchSummary: '', agentReasons: {} };
+                return { ...base, phase: (typeof event.message === 'string' ? event.message : event.phase) || '' };
               });
             } else if (event.type === 'agent-start' && event.agentId) {
               setCurrentThinking((prev) => {

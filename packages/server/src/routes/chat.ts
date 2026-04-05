@@ -92,7 +92,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  let fullText = await callGeminiText(chatSystemPrompt, prompt, 1000, { maxRetries: 5, callType: "chat-agent" });
+  let fullText = await callGeminiText(chatSystemPrompt, prompt, 1000, { maxRetries: 5, callType: "chat-agent", disableThinking: true });
 
   // Send the full result as a single "thinking" event
   if (fullText) {
@@ -166,7 +166,7 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
-  const fullText = await callGeminiText(MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master" });
+  const fullText = await callGeminiText(MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
