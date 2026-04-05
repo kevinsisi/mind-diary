@@ -31,7 +31,7 @@ interface UsageStats {
 
 export default function SettingsPage() {
   const { siteTitle, updateSiteTitle } = useSiteConfig();
-  const { user, updateNickname } = useAuth();
+  const { user, updateNickname, updateCustomInstructions } = useAuth();
   const isAdmin = user?.role === 'admin';
 
   const [titleInput, setTitleInput] = useState(siteTitle);
@@ -47,9 +47,14 @@ export default function SettingsPage() {
   const [adding, setAdding] = useState(false);
   const [nicknameInput, setNicknameInput] = useState(user?.nickname || '');
   const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [instructionsSaved, setInstructionsSaved] = useState(false);
 
   // Sync nickname input when user loads
-  useEffect(() => { setNicknameInput(user?.nickname || ''); }, [user?.nickname]);
+  useEffect(() => {
+    setNicknameInput(user?.nickname || '');
+    if (user?.custom_instructions !== undefined) setCustomInstructions(user.custom_instructions);
+  }, [user?.nickname, user?.custom_instructions]);
 
   // Sync input when context loads the persisted title
   useEffect(() => { setTitleInput(siteTitle); }, [siteTitle]);
@@ -94,6 +99,16 @@ export default function SettingsPage() {
       setNicknameSaving(false);
     }
   };
+
+  async function handleInstructionsSave() {
+    try {
+      await updateCustomInstructions(customInstructions);
+      setInstructionsSaved(true);
+      setTimeout(() => setInstructionsSaved(false), 2000);
+    } catch {
+      // silent
+    }
+  }
 
   const handleSaveTitle = async () => {
     const trimmed = titleInput.trim();
@@ -178,13 +193,13 @@ export default function SettingsPage() {
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">設定</h2>
-          <p className="mt-1 text-gray-500">{isAdmin ? '管理 Gemini API 金鑰與用量統計' : '個人設定'}</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">設定</h2>
+          <p className="mt-1 text-gray-500 dark:text-gray-400">{isAdmin ? '管理 Gemini API 金鑰與用量統計' : '個人設定'}</p>
         </div>
         {isAdmin && (
           <button
             onClick={loadAll}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800"
           >
             <RefreshCw className="w-4 h-4" />
             重新整理
@@ -194,21 +209,21 @@ export default function SettingsPage() {
 
       {/* Messages */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg flex items-center justify-between">
+        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 rounded-lg flex items-center justify-between">
           <span>{error}</span>
           <button onClick={() => setError('')} className="text-red-400 hover:text-red-600">✕</button>
         </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center justify-between">
+        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 rounded-lg flex items-center justify-between">
           <span>{success}</span>
           <button onClick={() => setSuccess('')} className="text-green-400 hover:text-green-600">✕</button>
         </div>
       )}
 
       {/* Nickname */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <User className="w-5 h-5" />
           暱稱
         </h3>
@@ -219,7 +234,7 @@ export default function SettingsPage() {
             onChange={(e) => setNicknameInput(e.target.value)}
             placeholder="輸入你的暱稱（最多 30 字）"
             maxLength={30}
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleSaveNickname()}
           />
           <button
@@ -230,7 +245,32 @@ export default function SettingsPage() {
             {nicknameSaving ? '儲存中…' : '儲存'}
           </button>
         </div>
-        <p className="mt-2 text-xs text-gray-400">設定後，AI 好友們會用你的暱稱稱呼你</p>
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">設定後，AI 好友們會用你的暱稱稱呼你</p>
+      </div>
+
+      {/* Custom Instructions */}
+      <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-5 mb-6">
+        <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100 mb-1">自訂指示</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+          告訴 AI 夥伴你的偏好、背景或希望它注意的事項（最多 500 字）
+        </p>
+        <textarea
+          value={customInstructions}
+          onChange={(e) => setCustomInstructions(e.target.value)}
+          maxLength={500}
+          rows={4}
+          className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+          placeholder="例如：我喜歡簡短的回覆、我正在學習程式設計、請用鼓勵的語氣回應我..."
+        />
+        <div className="flex items-center justify-between mt-2">
+          <span className="text-xs text-gray-400 dark:text-gray-600">{customInstructions.length}/500</span>
+          <button
+            onClick={handleInstructionsSave}
+            className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition-colors"
+          >
+            {instructionsSaved ? '已儲存 ✓' : '儲存'}
+          </button>
+        </div>
       </div>
 
       {/* Usage Stats */}
@@ -241,13 +281,13 @@ export default function SettingsPage() {
             { label: '7 天', data: usage.last7d },
             { label: '30 天', data: usage.last30d },
           ].map(({ label, data }) => (
-            <div key={label} className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+            <div key={label} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-2">
                 <BarChart3 className="w-4 h-4" />
                 {label}
               </div>
-              <div className="text-2xl font-bold text-gray-900">{data.calls} <span className="text-sm font-normal text-gray-400">次呼叫</span></div>
-              <div className="text-sm text-gray-500">{formatTokens(data.tokens_in + data.tokens_out)} tokens</div>
+              <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{data.calls} <span className="text-sm font-normal text-gray-400 dark:text-gray-500">次呼叫</span></div>
+              <div className="text-sm text-gray-500 dark:text-gray-400">{formatTokens(data.tokens_in + data.tokens_out)} tokens</div>
             </div>
           ))}
         </div>
@@ -257,8 +297,8 @@ export default function SettingsPage() {
       {isAdmin && <>
 
       {/* Site Title */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <Globe className="w-5 h-5" />
           網站標題
         </h3>
@@ -268,7 +308,7 @@ export default function SettingsPage() {
             value={titleInput}
             onChange={(e) => setTitleInput(e.target.value)}
             placeholder="輸入網站標題"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
           />
           <button
@@ -279,12 +319,12 @@ export default function SettingsPage() {
             {titleSaving ? '儲存中…' : '儲存'}
           </button>
         </div>
-        <p className="mt-2 text-xs text-gray-400">修改後會即時反映在側邊欄、瀏覽器 tab 標題及登入頁面</p>
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">修改後會即時反映在側邊欄、瀏覽器 tab 標題及登入頁面</p>
       </div>
 
       {/* Add Key */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-3 flex items-center gap-2">
           <Plus className="w-5 h-5" />
           新增金鑰
         </h3>
@@ -295,7 +335,7 @@ export default function SettingsPage() {
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             placeholder="貼上 Gemini API 金鑰（AIza...）"
-            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
+            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
             onKeyDown={(e) => e.key === 'Enter' && handleAddKey()}
           />
           <button
@@ -325,10 +365,10 @@ export default function SettingsPage() {
               onChange={(e) => setBatchText(e.target.value)}
               placeholder="每行一把金鑰，自動過濾非 AIza 開頭的行..."
               rows={5}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
             />
             <div className="mt-2 flex items-center justify-between">
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-gray-400 dark:text-gray-500">
                 偵測到 {batchText.split(/\r?\n/).filter(l => l.trim().startsWith('AIza') && l.trim().length >= 20).length} 把有效金鑰
               </span>
               <button
@@ -344,43 +384,43 @@ export default function SettingsPage() {
       </div>
 
       {/* Key List */}
-      <div className="bg-white border border-gray-200 rounded-lg">
-        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
             <Key className="w-5 h-5" />
             金鑰列表
           </h3>
-          <span className="text-sm text-gray-500">{keys.length} 把金鑰</span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{keys.length} 把金鑰</span>
         </div>
 
         {loading ? (
-          <div className="p-8 text-center text-gray-400">載入中...</div>
+          <div className="p-8 text-center text-gray-400 dark:text-gray-500">載入中...</div>
         ) : keys.length === 0 ? (
           <div className="p-8 text-center">
-            <Key className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">尚未新增任何金鑰</p>
-            <p className="text-sm text-gray-400 mt-1">在上方貼上你的 Gemini API 金鑰開始使用</p>
+            <Key className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+            <p className="text-gray-500 dark:text-gray-400">尚未新增任何金鑰</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">在上方貼上你的 Gemini API 金鑰開始使用</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {keys.map((k) => (
-              <div key={k.suffix} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+              <div key={k.suffix} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 dark:hover:bg-gray-800">
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${k.isBlocked ? 'bg-red-400' : k.inCooldown ? 'bg-yellow-400' : 'bg-green-400'}`} />
                   <div>
-                    <div className="font-mono text-sm text-gray-900">
+                    <div className="font-mono text-sm text-gray-900 dark:text-gray-100">
                       ...{k.suffix}
                       {k.source === 'env' && (
-                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">ENV</span>
+                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded">ENV</span>
                       )}
                       {k.isBlocked && (
-                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-100 text-red-700 rounded">已封鎖</span>
+                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded">已封鎖</span>
                       )}
                       {k.inCooldown && !k.isBlocked && (
-                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-yellow-100 text-yellow-700 rounded">冷卻中 ({k.cooldownReason})</span>
+                        <span className="ml-2 px-1.5 py-0.5 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">冷卻中 ({k.cooldownReason})</span>
                       )}
                     </div>
-                    <div className="text-xs text-gray-400 mt-0.5">
+                    <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                       累計 {k.totalCalls} 次 · {formatTokens(k.totalTokensIn + k.totalTokensOut)} tokens
                     </div>
                   </div>
@@ -400,8 +440,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Help */}
-      <div className="mt-6 p-4 bg-gray-50 rounded-lg text-sm text-gray-500">
-        <p className="font-medium text-gray-700 mb-1">💡 提示</p>
+      <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm text-gray-500 dark:text-gray-400">
+        <p className="font-medium text-gray-700 dark:text-gray-300 mb-1">💡 提示</p>
         <ul className="list-disc list-inside space-y-1">
           <li>前往 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">Google AI Studio</a> 取得免費的 Gemini API 金鑰</li>
           <li>多把金鑰可以分散 rate limit，提高穩定性</li>

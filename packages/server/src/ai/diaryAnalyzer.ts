@@ -123,6 +123,12 @@ function buildNicknameInstruction(nickname: string): string {
   return nickname ? `使用者的暱稱是「${nickname}」，請在回應中用暱稱稱呼使用者。\n\n` : '';
 }
 
+function buildCustomInstructions(customInstructions: string): string {
+  return customInstructions.trim()
+    ? `使用者的自訂指示（請遵守）：\n${customInstructions.trim()}\n\n`
+    : '';
+}
+
 // Run a single agent analysis
 async function runAgent(
   agent: AgentPersona,
@@ -132,6 +138,7 @@ async function runAgent(
   onEvent: OnEvent,
   imageContext?: string,
   nickname?: string,
+  customInstructions?: string,
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
     type: 'agent-start',
@@ -153,7 +160,7 @@ async function runAgent(
     const genai = new GoogleGenerativeAI(apiKey);
     const geminiModel = genai.getGenerativeModel({
       model: modelName,
-      systemInstruction: buildNicknameInstruction(nickname || '') + agent.systemPrompt,
+      systemInstruction: buildNicknameInstruction(nickname || '') + buildCustomInstructions(customInstructions || '') + agent.systemPrompt,
       generationConfig: { maxOutputTokens: 2048 },
     });
 
@@ -262,6 +269,7 @@ export async function analyzeDiary(
   onEvent: OnEvent,
   imageContext?: string,
   nickname?: string,
+  customInstructions?: string,
 ): Promise<{ reflection: string; tags: string[]; agentResults: Array<{ agentId: string; name: string; emoji: string; role: string; result: string }> }> {
   // Phase 1: AI-based agent selection
   onEvent({ type: 'phase', phase: 'analyzing', message: 'AI 分析日記內容，選擇最適合的好友...' });
@@ -289,7 +297,7 @@ export async function analyzeDiary(
   const keys = assignBatchKeys(selectedAgents.length);
   const agentPromises = selectedAgents.map((agent, i) => {
     const key = keys[i % keys.length];
-    return runAgent(agent, title, content, key, onEvent, imageContext, nickname).catch(err => {
+    return runAgent(agent, title, content, key, onEvent, imageContext, nickname, customInstructions).catch(err => {
       onEvent({ type: 'error', agentId: agent.id, message: `${agent.name} 分析失敗: ${err.message}` });
       return { agentId: agent.id, result: '（分析暫時無法完成）' };
     });

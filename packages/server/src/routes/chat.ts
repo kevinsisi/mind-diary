@@ -60,6 +60,12 @@ function buildNicknameInstruction(nickname: string): string {
   return nickname ? `使用者的暱稱是「${nickname}」，請在回應中用暱稱稱呼使用者。\n\n` : '';
 }
 
+function buildCustomInstructions(customInstructions: string): string {
+  return customInstructions.trim()
+    ? `使用者的自訂指示（請遵守）：\n${customInstructions.trim()}\n\n`
+    : '';
+}
+
 async function runChatAgent(
   agent: AgentPersona,
   userMessage: string,
@@ -69,6 +75,7 @@ async function runChatAgent(
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
   nickname?: string,
+  customInstructions?: string,
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
     type: "agent-start",
@@ -78,7 +85,7 @@ async function runChatAgent(
     agentRole: agent.role,
   });
 
-  const chatSystemPrompt = `${buildNicknameInstruction(nickname || '')}你是「${agent.name}」（${agent.role}），正在和其他 AI 好友一起回應使用者的訊息。
+  const chatSystemPrompt = `${buildNicknameInstruction(nickname || '')}${buildCustomInstructions(customInstructions || '')}你是「${agent.name}」（${agent.role}），正在和其他 AI 好友一起回應使用者的訊息。
 
 ${agent.systemPrompt}
 
@@ -522,9 +529,10 @@ router.post(
         })),
       });
 
-      // Look up user nickname for personalized AI responses
-      const chatUserData = sqlite.prepare("SELECT nickname FROM users WHERE id = ?").get(req.userId) as { nickname: string } | undefined;
+      // Look up user nickname and custom_instructions for personalized AI responses
+      const chatUserData = sqlite.prepare("SELECT nickname, custom_instructions FROM users WHERE id = ?").get(req.userId) as { nickname: string; custom_instructions: string } | undefined;
       const userNickname = chatUserData?.nickname || '';
+      const userCustomInstructions = chatUserData?.custom_instructions || '';
 
       // 5. Run agents in parallel (callGeminiWithRetry handles keys internally)
       const agentPromises = selectedAgents.map((agent) => {
@@ -537,6 +545,7 @@ router.post(
           sendEvent,
           imagePart || undefined,
           userNickname,
+          userCustomInstructions,
         ).catch((err) => {
           console.error(`[chat] Agent ${agent.id} failed:`, err);
           sendEvent({

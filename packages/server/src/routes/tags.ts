@@ -1,20 +1,23 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-// GET /api/tags — list all tags with usage count
-router.get("/", (_req: Request, res: Response) => {
+// GET /api/tags — list tags used in the current user's diary entries
+router.get("/", requireAuth, (req: Request, res: Response) => {
   try {
     const tags = sqlite
       .prepare(
         `SELECT t.*, COUNT(dt.diary_id) as count
          FROM tags t
-         LEFT JOIN diary_entry_tags dt ON dt.tag_id = t.id
+         INNER JOIN diary_entry_tags dt ON dt.tag_id = t.id
+         INNER JOIN diary_entries d ON dt.diary_id = d.id
+         WHERE d.user_id = ?
          GROUP BY t.id
          ORDER BY count DESC`
       )
-      .all();
+      .all(req.userId);
     res.json({ tags });
   } catch (err: any) {
     console.error("[tags] List error:", err);
@@ -35,10 +38,7 @@ router.delete("/:id", (req: Request, res: Response) => {
       return res.status(404).json({ error: "標籤不存在" });
     }
 
-    // Remove junction rows first
     sqlite.prepare("DELETE FROM diary_entry_tags WHERE tag_id = ?").run(id);
-
-    // Remove tag
     sqlite.prepare("DELETE FROM tags WHERE id = ?").run(id);
 
     res.json({ success: true });

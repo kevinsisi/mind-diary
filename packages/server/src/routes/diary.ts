@@ -314,8 +314,9 @@ router.post("/:id/analyze", async (req: Request, res: Response) => {
   try {
     const { analyzeDiary } = await import('../ai/diaryAnalyzer.js');
 
-    const userData = sqlite.prepare("SELECT nickname FROM users WHERE id = ?").get(req.userId) as { nickname: string } | undefined;
+    const userData = sqlite.prepare("SELECT nickname, custom_instructions FROM users WHERE id = ?").get(req.userId) as { nickname: string; custom_instructions: string } | undefined;
     const nickname = userData?.nickname || '';
+    const customInstructions = userData?.custom_instructions || '';
 
     const result = await analyzeDiary(
       entry.title,
@@ -326,6 +327,7 @@ router.post("/:id/analyze", async (req: Request, res: Response) => {
       },
       undefined,
       nickname,
+      customInstructions,
     );
 
     // Save reflection to DB

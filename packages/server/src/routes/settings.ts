@@ -7,7 +7,7 @@ import {
   getUsageStats,
 } from "../ai/keyPool.js";
 import { sqlite } from "../db/connection.js";
-import { requireAdmin } from "../middleware/auth.js";
+import { requireAdmin, requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -148,11 +148,46 @@ router.post("/keys/validate", requireAdmin, (req: Request, res: Response) => {
   }
 });
 
-// GET /api/settings/usage — aggregated usage stats (admin only)
-router.get("/usage", requireAdmin, (_req: Request, res: Response) => {
+// GET /api/settings/usage — admin: global stats; user: per-user diary AI call counts
+router.get("/usage", requireAuth, (req: Request, res: Response) => {
   try {
-    const stats = getUsageStats();
-    res.json(stats);
+    if (req.userRole === "admin") {
+      const stats = getUsageStats();
+      res.json(stats);
+      return;
+    }
+
+    const userId = req.userId;
+
+    const todayCalls = (sqlite
+      .prepare(
+        `SELECT COUNT(*) as calls FROM diary_entries
+         WHERE user_id = ? AND ai_reflection IS NOT NULL
+         AND date(created_at) = date('now')`
+      )
+      .get(userId) as { calls: number }).calls;
+
+    const last7dCalls = (sqlite
+      .prepare(
+        `SELECT COUNT(*) as calls FROM diary_entries
+         WHERE user_id = ? AND ai_reflection IS NOT NULL
+         AND created_at >= datetime('now', '-7 days')`
+      )
+      .get(userId) as { calls: number }).calls;
+
+    const last30dCalls = (sqlite
+      .prepare(
+        `SELECT COUNT(*) as calls FROM diary_entries
+         WHERE user_id = ? AND ai_reflection IS NOT NULL
+         AND created_at >= datetime('now', '-30 days')`
+      )
+      .get(userId) as { calls: number }).calls;
+
+    res.json({
+      today: { calls: todayCalls, tokens_in: 0, tokens_out: 0 },
+      last7d: { calls: last7dCalls, tokens_in: 0, tokens_out: 0 },
+      last30d: { calls: last30dCalls, tokens_in: 0, tokens_out: 0 },
+    });
   } catch (err: any) {
     console.error("[settings] Usage stats error:", err);
     res.status(500).json({ error: err.message || "查詢失敗" });

@@ -201,7 +201,7 @@ function ThinkingCard({
       <div className="flex justify-start my-2">
         <button
           onClick={onToggle}
-          className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] text-xs sm:text-sm text-gray-500 hover:text-indigo-600 bg-gray-50 hover:bg-indigo-50 border border-gray-200 hover:border-indigo-200 rounded-lg transition-colors"
+          className="flex items-center gap-1.5 px-3 py-2.5 min-h-[44px] text-xs sm:text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-gray-50 dark:bg-gray-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 border border-gray-200 dark:border-gray-700 hover:border-indigo-200 dark:hover:border-indigo-700 rounded-lg transition-colors"
         >
           <ChevronRight size={14} />
           <span>
@@ -217,23 +217,23 @@ function ThinkingCard({
   return (
     <div className="flex justify-start my-2">
       <div className="max-w-full lg:max-w-[85%] w-full">
-        <div className="rounded-xl border border-gray-200 bg-gray-50/80 overflow-hidden">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-800/80 overflow-hidden">
           {/* Phase indicator */}
           {thinking.phase && (
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
               {isStreaming && <Loader2 size={12} className="animate-spin text-indigo-500" />}
-              <span className="text-sm lg:text-xs text-indigo-600 font-medium">{thinking.phase}</span>
+              <span className="text-sm lg:text-xs text-indigo-600 dark:text-indigo-400 font-medium">{thinking.phase}</span>
             </div>
           )}
 
           {/* Dispatch summary — 夥伴小屋 */}
           {thinking.dispatchSummary && (
-            <div className="px-3 py-2.5 border-b border-indigo-100 bg-indigo-50/60">
+            <div className="px-3 py-2.5 border-b border-indigo-100 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/20">
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-xs">🏡</span>
-                <span className="text-xs font-semibold text-indigo-700">夥伴小屋</span>
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">夥伴小屋</span>
               </div>
-              <div className="text-xs text-indigo-800 leading-relaxed">
+              <div className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
                 {thinking.dispatchSummary}
               </div>
             </div>
@@ -242,13 +242,13 @@ function ThinkingCard({
           {/* Agent cards */}
           <div className="p-2 space-y-1.5">
             {agentEntries.map(([id, agent]) => (
-              <div key={id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 border-b border-gray-100 min-h-[44px]">
+              <div key={id} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 min-h-[44px]">
                   <span>{agent.emoji}</span>
-                  <span className="text-xs font-medium text-gray-900">{agent.name}</span>
-                  <span className="text-xs text-gray-400">{agent.role}</span>
+                  <span className="text-xs font-medium text-gray-900 dark:text-gray-100">{agent.name}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">{agent.role}</span>
                   {thinking.agentReasons[id] && (
-                    <span className="text-[10px] text-gray-400 italic ml-1">
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-1">
                       — {thinking.agentReasons[id]}
                     </span>
                   )}
@@ -257,24 +257,24 @@ function ThinkingCard({
                   )}
                   {agent.done && <span className="text-xs text-green-500 ml-auto">&#10003;</span>}
                 </div>
-                <div className="px-3 py-1.5 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
-                  {agent.text || <span className="text-gray-300 italic">思考中...</span>}
+                <div className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
+                  {agent.text || <span className="text-gray-300 dark:text-gray-600 italic">思考中...</span>}
                 </div>
               </div>
             ))}
 
             {/* Synthesis streaming */}
             {thinking.synthesisText && (
-              <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 overflow-hidden">
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-100/50 border-b border-indigo-200">
+              <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-100/50 dark:bg-indigo-900/30 border-b border-indigo-200 dark:border-indigo-800">
                   <span>&#129504;</span>
-                  <span className="text-xs font-medium text-indigo-900">整合者</span>
-                  <span className="text-xs text-indigo-400">彙整觀點</span>
+                  <span className="text-xs font-medium text-indigo-900 dark:text-indigo-300">整合者</span>
+                  <span className="text-xs text-indigo-400 dark:text-indigo-500">彙整觀點</span>
                   {isStreaming && (
                     <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />
                   )}
                 </div>
-                <div className="px-3 py-1.5 text-xs text-indigo-800 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
+                <div className="px-3 py-1.5 text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed whitespace-pre-line max-h-32 lg:max-h-48 overflow-y-auto">
                   {thinking.synthesisText}
                 </div>
               </div>
@@ -285,7 +285,7 @@ function ThinkingCard({
           {!isStreaming && agentCount > 0 && (
             <button
               onClick={onToggle}
-              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 min-h-[44px] text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 hover:bg-gray-100 transition-colors"
+              className="w-full flex items-center justify-center gap-1 px-3 py-2.5 min-h-[44px] text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 border-t border-gray-100 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             >
               <ChevronDown size={14} />
               收起思考過程
@@ -311,25 +311,25 @@ function AgentMessageCard({
 
   return (
     <div
-      className="rounded-xl bg-white border border-gray-100 shadow-sm overflow-hidden"
+      className="rounded-xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden"
       style={{ borderLeftWidth: '4px', borderLeftColor: color }}
     >
       {/* Agent header */}
       <div className="px-3 py-2 flex items-center gap-2">
         <span className="text-base">{agent.emoji}</span>
-        <span className="text-sm font-semibold text-gray-900">{agent.name}</span>
-        {role && <span className="text-xs text-gray-400">· {role}</span>}
+        <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">{agent.name}</span>
+        {role && <span className="text-xs text-gray-400 dark:text-gray-500">· {role}</span>}
       </div>
 
       {/* Reason */}
       {reason && (
-        <div className="px-3 pb-1 text-xs text-gray-400 italic">
+        <div className="px-3 pb-1 text-xs text-gray-400 dark:text-gray-500 italic">
           「{reason}」
         </div>
       )}
 
       {/* Response content */}
-      <div className="px-3 pb-3 text-sm text-gray-800 leading-relaxed prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 break-words">
+      <div className="px-3 pb-3 text-sm text-gray-800 dark:text-gray-200 leading-relaxed prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
         <ReactMarkdown>{agent.text}</ReactMarkdown>
       </div>
     </div>
@@ -370,12 +370,12 @@ function AssistantMessage({
         <div className="max-w-full lg:max-w-3xl w-full space-y-2">
           {/* Dispatch reason — 夥伴小屋 */}
           {msg.dispatch_reason && (
-            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 mb-1">
+            <div className="rounded-xl border border-indigo-100 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-900/20 px-3 py-2.5 mb-1">
               <div className="flex items-center gap-1.5 mb-1">
                 <span className="text-xs">🏡</span>
-                <span className="text-xs font-semibold text-indigo-700">夥伴小屋</span>
+                <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-400">夥伴小屋</span>
               </div>
-              <div className="text-xs text-indigo-800 leading-relaxed">
+              <div className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
                 {msg.dispatch_reason}
               </div>
             </div>
@@ -391,7 +391,7 @@ function AssistantMessage({
           ))}
 
           {/* Timestamp */}
-          <div className="text-xs text-gray-400 px-1">
+          <div className="text-xs text-gray-400 dark:text-gray-500 px-1">
             {formatTime(msg.created_at)}
           </div>
         </div>
@@ -402,11 +402,11 @@ function AssistantMessage({
   // Fallback: plain bubble for old messages
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 text-gray-800 rounded-bl-md">
-        <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 break-words">
+      <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-md">
+        <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
           <ReactMarkdown>{msg.content}</ReactMarkdown>
         </div>
-        <div className="text-xs mt-1.5 text-gray-400">
+        <div className="text-xs mt-1.5 text-gray-400 dark:text-gray-500">
           {formatTime(msg.created_at)}
         </div>
       </div>
@@ -473,7 +473,7 @@ function SessionItem({
               if (e.key === 'Enter') commitEdit();
               if (e.key === 'Escape') setEditing(false);
             }}
-            className="w-full text-xs font-medium bg-white border border-indigo-400 rounded px-1.5 py-1 focus:outline-none"
+            className="w-full text-xs font-medium bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-indigo-400 rounded px-1.5 py-1 focus:outline-none"
           />
         </div>
       ) : (
@@ -482,8 +482,8 @@ function SessionItem({
         onDoubleClick={startEdit}
         className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors group flex items-center justify-between gap-1.5 ${
           isActive
-            ? 'bg-indigo-100 text-indigo-800'
-            : 'text-gray-700 hover:bg-gray-100'
+            ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300'
+            : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
         }`}
       >
         <div className="min-w-0 flex-1">
@@ -491,11 +491,11 @@ function SessionItem({
             {session.title || '新對話'}
           </div>
           {session.lastMessage && (
-            <div className="text-[10px] text-gray-400 truncate mt-0.5">
+            <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate mt-0.5">
               {session.lastMessage}
             </div>
           )}
-          <div className="text-[10px] text-gray-400 mt-0.5">
+          <div className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
             {formatTime(session.created_at)}
           </div>
         </div>
@@ -529,12 +529,12 @@ function SessionItem({
 
       {/* Move-to-folder dropdown */}
       {isMoving && (
-        <div data-move-dropdown className="absolute right-0 top-full z-20 mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 py-1 text-xs">
-          <div className="px-3 py-1 text-gray-400 font-medium">移至...</div>
+        <div data-move-dropdown className="absolute right-0 top-full z-20 mt-1 w-40 bg-white dark:bg-gray-900 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 text-xs">
+          <div className="px-3 py-1 text-gray-400 dark:text-gray-500 font-medium">移至...</div>
           {session.folder_id !== null && (
             <button
               onClick={() => onMoveTo(null)}
-              className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-600"
+              className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
             >
               未分類
             </button>
@@ -545,14 +545,14 @@ function SessionItem({
               <button
                 key={f.id}
                 onClick={() => onMoveTo(f.id)}
-                className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-600 truncate"
+                className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 truncate"
               >
                 {f.icon ? `${f.icon} ` : ''}{f.name}
               </button>
             ))}
           <button
             onClick={onMoveEnd}
-            className="w-full text-left px-3 py-1.5 hover:bg-gray-50 text-gray-400 border-t border-gray-100 mt-1"
+            className="w-full text-left px-3 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-400 dark:text-gray-500 border-t border-gray-100 dark:border-gray-700 mt-1"
           >
             取消
           </button>
@@ -1209,13 +1209,13 @@ export default function Chat() {
             ? 'fixed inset-y-0 left-0 z-40 w-72 lg:static lg:z-auto'
             : 'hidden lg:block lg:w-0 lg:overflow-hidden'
           }
-          flex-shrink-0 border-r border-gray-200 bg-gray-50 transition-[width] duration-200
+          flex-shrink-0 border-r border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 transition-[width] duration-200
         `}
       >
         <div className="w-72 h-full flex flex-col">
           {/* Sidebar header */}
-          <div className="flex items-center justify-between p-3 border-b border-gray-200">
-            <h2 className="text-sm font-semibold text-gray-700">對話紀錄</h2>
+          <div className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-700">
+            <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">對話紀錄</h2>
             <div className="flex items-center gap-1.5">
               <button
                 onClick={createSession}
@@ -1227,7 +1227,7 @@ export default function Chat() {
               {/* Close button on mobile */}
               <button
                 onClick={() => setSidebarOpen(false)}
-                className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
               >
                 <X size={18} />
               </button>
@@ -1247,7 +1247,7 @@ export default function Chat() {
                     if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); }
                   }}
                   placeholder="資料夾名稱"
-                  className="flex-1 min-w-0 text-xs border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  className="flex-1 min-w-0 text-xs border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                 />
                 <button onClick={createFolder} className="p-1 text-indigo-600 hover:text-indigo-800" title="確認"><Plus size={14} /></button>
                 <button onClick={() => { setShowNewFolder(false); setNewFolderName(''); }} className="p-1 text-gray-400 hover:text-gray-600" title="取消"><X size={14} /></button>
@@ -1255,7 +1255,7 @@ export default function Chat() {
             ) : (
               <button
                 onClick={() => setShowNewFolder(true)}
-                className="flex items-center gap-1 text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+                className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
               >
                 <FolderPlus size={13} />
                 新增資料夾
@@ -1266,7 +1266,7 @@ export default function Chat() {
           {/* Session list grouped by folder */}
           <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
             {sessions.length === 0 && folders.length === 0 && (
-              <p className="text-center text-sm text-gray-400 mt-8">
+              <p className="text-center text-sm text-gray-400 dark:text-gray-500 mt-8">
                 尚無對話紀錄
               </p>
             )}
@@ -1280,7 +1280,7 @@ export default function Chat() {
                   {/* Folder header */}
                   <button
                     onClick={() => toggleFolder(folder.id)}
-                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors group"
+                    className="w-full flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-semibold text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors group"
                   >
                     {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                     <Folder size={14} className="text-indigo-400" />
@@ -1321,7 +1321,7 @@ export default function Chat() {
             {sessionsByFolder.uncategorized.length > 0 && (
               <div>
                 {folders.length > 0 && (
-                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
+                  <div className="px-2 pt-2 pb-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     未分類
                   </div>
                 )}
@@ -1349,22 +1349,22 @@ export default function Chat() {
       </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-gray-950">
         {!user && (
-          <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 text-xs text-amber-800">
+          <div className="px-4 py-2 bg-amber-50 dark:bg-amber-900/20 border-b border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-400">
             訪客模式 — 您的對話紀錄存放在公共空間。<a href="/login" className="underline font-medium ml-1">登入</a>以使用個人對話。
           </div>
         )}
         {/* Chat header */}
-        <div className="flex items-center gap-3 px-3 lg:px-4 py-3 border-b border-gray-200 bg-white">
+        <div className="flex items-center gap-3 px-3 lg:px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
             title={sidebarOpen ? '收起側欄' : '展開側欄'}
           >
             {sidebarOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
           </button>
-          <h2 className="text-sm font-semibold text-gray-700 truncate">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300 truncate">
             {activeSessionId
               ? sessions.find((s) => s.id === activeSessionId)?.title || '對話'
               : 'AI 對話'}
@@ -1373,7 +1373,7 @@ export default function Chat() {
 
         {/* Messages or empty state */}
         {!activeSessionId ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 px-4">
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 dark:text-gray-500 px-4">
             <MessageCircle size={36} className="lg:w-12 lg:h-12" strokeWidth={1.5} />
             <p className="mt-3 text-base lg:text-lg">選擇或建立對話</p>
             <button
@@ -1392,7 +1392,7 @@ export default function Chat() {
                   <Loader2 size={24} className="animate-spin text-indigo-500" />
                 </div>
               ) : messages.length === 0 && !sendingMessage ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                <div className="flex flex-col items-center justify-center h-full text-gray-400 dark:text-gray-500">
                   <MessageCircle size={32} className="lg:w-9 lg:h-9" strokeWidth={1.5} />
                   <p className="mt-3 text-sm">開始對話吧</p>
                 </div>
@@ -1450,10 +1450,10 @@ export default function Chat() {
                   {/* Fallback typing indicator when no agents have started yet */}
                   {sendingMessage && (!currentThinking || Object.keys(currentThinking.agents).length === 0) && !currentThinking?.phase && (
                     <div className="flex justify-start">
-                      <div className="bg-gray-100 rounded-2xl rounded-bl-md px-4 py-3">
+                      <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl rounded-bl-md px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <Loader2 size={14} className="animate-spin text-gray-400" />
-                          <span className="text-sm text-gray-400">AI 思考中...</span>
+                          <span className="text-sm text-gray-400 dark:text-gray-500">AI 思考中...</span>
                         </div>
                       </div>
                     </div>
@@ -1465,12 +1465,12 @@ export default function Chat() {
             </div>
 
             {/* Input bar */}
-            <div className="border-t border-gray-200 bg-white px-3 lg:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 lg:px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               <div className="max-w-full lg:max-w-3xl mx-auto space-y-2">
                 {/* Image preview */}
                 {chatImagePreview && (
                   <div className="flex items-center gap-2 px-1">
-                    <div className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 shrink-0">
+                    <div className="relative group w-16 h-16 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800 shrink-0">
                       <img src={chatImagePreview} alt="" className="w-full h-full object-cover" />
                       <button
                         onClick={clearChatImage}
@@ -1479,7 +1479,7 @@ export default function Chat() {
                         <X size={10} />
                       </button>
                     </div>
-                    <span className="text-xs text-gray-400">圖片已附加，AI 將分析此圖片</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">圖片已附加，AI 將分析此圖片</span>
                   </div>
                 )}
 
@@ -1488,7 +1488,7 @@ export default function Chat() {
                   <button
                     onClick={() => chatImageInputRef.current?.click()}
                     disabled={sendingMessage}
-                    className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-indigo-600 hover:border-indigo-300 hover:bg-indigo-50 transition-colors disabled:opacity-40"
+                    className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl border border-gray-200 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors disabled:opacity-40"
                     title="附加圖片"
                   >
                     <ImageIcon size={18} />
@@ -1509,7 +1509,7 @@ export default function Chat() {
                     onPaste={handleInputPaste}
                     placeholder={chatImage ? '補充圖片說明（可選）...' : '輸入訊息或貼上圖片...'}
                     rows={1}
-                    className="flex-1 resize-none rounded-xl border border-gray-300 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
+                    className="flex-1 resize-none rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 px-3 lg:px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent max-h-32 overflow-y-auto"
                     style={{ height: 'auto', minHeight: '2.75rem' }}
                     onInput={(e) => {
                       const target = e.target as HTMLTextAreaElement;

@@ -45,7 +45,7 @@ router.get("/me", (req: Request, res: Response) => {
     return;
   }
   const user = sqlite
-    .prepare("SELECT id, username, role, nickname, created_at FROM users WHERE id = ?")
+    .prepare("SELECT id, username, role, nickname, custom_instructions, created_at FROM users WHERE id = ?")
     .get(req.userId) as any;
   if (!user) {
     res.status(401).json({ error: "使用者不存在" });
@@ -60,15 +60,31 @@ router.patch("/me", (req: Request, res: Response) => {
     res.status(401).json({ error: "未登入" });
     return;
   }
-  const { nickname } = req.body as { nickname?: string };
-  if (typeof nickname !== "string") {
-    res.status(400).json({ error: "nickname 必須是字串" });
+  const { nickname, custom_instructions } = req.body as { nickname?: string; custom_instructions?: string };
+
+  const updates: string[] = [];
+  const params: any[] = [];
+
+  if (typeof nickname === "string") {
+    updates.push("nickname = ?");
+    params.push(nickname.trim().slice(0, 30));
+  }
+
+  if (typeof custom_instructions === "string") {
+    updates.push("custom_instructions = ?");
+    params.push(custom_instructions.trim().slice(0, 500));
+  }
+
+  if (updates.length === 0) {
+    res.status(400).json({ error: "沒有可更新的欄位" });
     return;
   }
-  const trimmed = nickname.trim().slice(0, 30);
-  sqlite.prepare("UPDATE users SET nickname = ? WHERE id = ?").run(trimmed, req.userId);
+
+  params.push(req.userId);
+  sqlite.prepare(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`).run(...params);
+
   const updated = sqlite
-    .prepare("SELECT id, username, role, nickname, created_at FROM users WHERE id = ?")
+    .prepare("SELECT id, username, role, nickname, custom_instructions, created_at FROM users WHERE id = ?")
     .get(req.userId) as any;
   res.json(updated);
 });

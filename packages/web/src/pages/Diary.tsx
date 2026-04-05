@@ -158,7 +158,7 @@ function ImageGallery({
         {images.map((img, i) => (
           <div
             key={img.id}
-            className="relative group rounded-xl overflow-hidden bg-gray-100 cursor-pointer"
+            className="relative group rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 cursor-pointer"
             style={{ aspectRatio: images.length === 1 ? '16/9' : '1/1' }}
             onClick={() => setLightbox(i)}
           >
@@ -701,11 +701,11 @@ export default function Diary() {
   // ── Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="flex h-[calc(100vh-7rem)] lg:h-[calc(100vh-3rem)] -m-6 bg-gray-50">
+    <div className="flex h-[calc(100vh-7rem)] lg:h-[calc(100vh-3rem)] -m-6 bg-gray-50 dark:bg-gray-950">
       {/* ── Left Sidebar ──────────────────────────────────────── */}
-      <aside className="hidden md:flex flex-col w-60 border-r border-gray-200 bg-white shrink-0">
-        <div className="p-4 border-b border-gray-100">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+      <aside className="hidden md:flex flex-col w-60 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
+        <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+          <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
             資料夾
           </h3>
 
@@ -717,8 +717,8 @@ export default function Diary() {
             }}
             className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeFolder === null && activeTag === null
-                ? 'bg-indigo-50 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
             }`}
           >
             <BookOpen size={16} />
@@ -735,8 +735,8 @@ export default function Diary() {
               }}
               className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 activeFolder === f.id
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-gray-600 hover:bg-gray-100'
+                  ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
               }`}
             >
               <span className="text-base leading-none">{f.icon || '📁'}</span>
@@ -756,7 +756,7 @@ export default function Diary() {
                   if (e.key === 'Escape') setShowNewFolder(false);
                 }}
                 placeholder="資料夾名稱"
-                className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
               />
               <button
                 onClick={handleCreateFolder}
@@ -774,7 +774,7 @@ export default function Diary() {
           ) : (
             <button
               onClick={() => setShowNewFolder(true)}
-              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
             >
               <Plus size={14} />
               新增資料夾
@@ -784,11 +784,11 @@ export default function Diary() {
 
         {/* Tags */}
         <div className="p-4 flex-1 overflow-y-auto">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-2">
             標籤
           </h3>
           {tags.length === 0 ? (
-            <p className="text-xs text-gray-400">尚無標籤</p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">尚無標籤</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {tags.map((t) => (
@@ -800,8 +800,8 @@ export default function Diary() {
                   }}
                   className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors ${
                     activeTag === t.name
-                      ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-300'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 ring-1 ring-indigo-300 dark:ring-indigo-700'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
                   }`}
                   style={
                     activeTag !== t.name && t.color
@@ -819,13 +819,13 @@ export default function Diary() {
       </aside>
 
       {/* ── Center Panel (Entry List) ─────────────────────────── */}
-      <div className="flex flex-col w-full md:w-80 lg:w-96 border-r border-gray-200 bg-white shrink-0">
+      <div className="flex flex-col w-full md:w-80 lg:w-96 border-r border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
           <div className="min-w-0">
-            <h2 className="text-lg font-bold text-gray-900 truncate">心靈日記</h2>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">心靈日記</h2>
             {filterLabel() && (
-              <div className="flex items-center gap-1 text-xs text-indigo-600 mt-0.5">
+              <div className="flex items-center gap-1 text-xs text-indigo-600 dark:text-indigo-400 mt-0.5">
                 <ChevronRight size={12} />
                 <span className="truncate">{filterLabel()}</span>
                 <button
@@ -852,12 +852,12 @@ export default function Diary() {
         {/* List */}
         <div ref={listRef} className="flex-1 overflow-y-auto">
           {loading && entries.length === 0 ? (
-            <div className="flex items-center justify-center h-40 text-gray-400">
+            <div className="flex items-center justify-center h-40 text-gray-400 dark:text-gray-500">
               <Loader2 size={20} className="animate-spin mr-2" />
               載入中...
             </div>
           ) : entries.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 text-gray-400">
+            <div className="flex flex-col items-center justify-center h-40 text-gray-400 dark:text-gray-500">
               <BookOpen size={32} className="mb-2 opacity-50" />
               <p className="text-sm">開始寫第一篇日記吧</p>
             </div>
@@ -871,18 +871,18 @@ export default function Diary() {
                     setEditMode(false);
                     setIsNew(false);
                   }}
-                  className={`w-full text-left p-4 border-b border-gray-50 hover:bg-gray-50 transition-colors ${
-                    selectedEntry?.id === entry.id ? 'border-l-2 border-l-indigo-500 bg-indigo-50/40' : ''
+                  className={`w-full text-left p-4 border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
+                    selectedEntry?.id === entry.id ? 'border-l-2 border-l-indigo-500 bg-indigo-50/40 dark:bg-indigo-900/20' : ''
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <h4 className="font-medium text-gray-900 text-sm truncate">{entry.title}</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100 text-sm truncate">{entry.title}</h4>
                     {entry.mood && (
                       <span className="text-base shrink-0">{MOOD_MAP[entry.mood] ?? entry.mood}</span>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-0.5">{formatDate(entry.created_at)}</p>
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-2 whitespace-pre-line">
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{formatDate(entry.created_at)}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2 whitespace-pre-line">
                     {truncate(entry.content, 2)}
                   </p>
                   {entry.tags.length > 0 && (
@@ -892,7 +892,7 @@ export default function Diary() {
                         return (
                           <span
                             key={t}
-                            className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500"
+                            className="inline-block px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400"
                             style={
                               tagObj?.color
                                 ? { backgroundColor: tagObj.color + '22', color: tagObj.color }
@@ -914,17 +914,17 @@ export default function Diary() {
                   <button
                     disabled={pagination.page <= 1}
                     onClick={() => fetchEntries(pagination.page - 1)}
-                    className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40"
+                    className="px-3 py-1 text-xs rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40"
                   >
                     上一頁
                   </button>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-400 dark:text-gray-500">
                     {pagination.page} / {pagination.totalPages}
                   </span>
                   <button
                     disabled={pagination.page >= pagination.totalPages}
                     onClick={() => fetchEntries(pagination.page + 1)}
-                    className="px-3 py-1 text-xs rounded bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-40"
+                    className="px-3 py-1 text-xs rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40"
                   >
                     下一頁
                   </button>
@@ -936,9 +936,9 @@ export default function Diary() {
       </div>
 
       {/* ── Right Panel (Detail / Editor) ─────────────────────── */}
-      <div className="hidden lg:flex flex-col flex-1 min-w-0 bg-white">
+      <div className="hidden lg:flex flex-col flex-1 min-w-0 bg-white dark:bg-gray-900">
         {!selectedEntry && !editMode ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-300">
+          <div className="flex flex-col items-center justify-center h-full text-gray-300 dark:text-gray-600">
             <BookOpen size={48} className="mb-3 opacity-40" />
             <p className="text-sm">選擇一篇日記或新增一篇</p>
           </div>
@@ -946,14 +946,14 @@ export default function Diary() {
           /* ── EDIT MODE ────────────────────────────────────────── */
           <div className="flex flex-col h-full" onPaste={handleEditPaste}>
             {/* Edit header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <h3 className="font-semibold text-gray-900">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100">
                 {isNew ? '新增日記' : '編輯日記'}
               </h3>
               <div className="flex items-center gap-2">
                 <button
                   onClick={cancelEdit}
-                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                  className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                 >
                   取消
                 </button>
@@ -972,30 +972,30 @@ export default function Diary() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">標題</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">標題</label>
                 <input
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   placeholder="留空讓 AI 自動生成標題"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                 />
               </div>
 
               {/* Content */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">內容</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">內容</label>
                 <textarea
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   placeholder="寫下你的心情與想法..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-y"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-y"
                   style={{ minHeight: '200px' }}
                 />
               </div>
 
               {/* Mood */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">心情</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">心情</label>
                 <div className="flex flex-wrap gap-2">
                   {MOOD_ENTRIES.map(([key, emoji]) => (
                     <button
@@ -1003,8 +1003,8 @@ export default function Diary() {
                       onClick={() => setEditMood(editMood === key ? null : key)}
                       className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${
                         editMood === key
-                          ? 'bg-indigo-100 ring-2 ring-indigo-400 scale-110'
-                          : 'bg-gray-50 hover:bg-gray-100'
+                          ? 'bg-indigo-100 dark:bg-indigo-900/30 ring-2 ring-indigo-400 scale-110'
+                          : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
                       }`}
                       title={key}
                     >
@@ -1016,14 +1016,14 @@ export default function Diary() {
 
               {/* Folder / Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">分類</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">分類</label>
                 <div className="flex gap-2">
                   <select
                     value={editFolderId ?? ''}
                     onChange={(e) =>
                       setEditFolderId(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-white"
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                   >
                     <option value="">未分類</option>
                     {folders.map((f) => (
@@ -1035,7 +1035,7 @@ export default function Diary() {
                   <button
                     type="button"
                     onClick={() => setShowNewFolder(true)}
-                    className="px-3 py-2 text-sm text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 border border-gray-300 rounded-lg transition-colors whitespace-nowrap"
+                    className="px-3 py-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 border border-gray-300 dark:border-gray-600 rounded-lg transition-colors whitespace-nowrap"
                     title="新增分類"
                   >
                     <Plus size={14} />
@@ -1052,7 +1052,7 @@ export default function Diary() {
                         if (e.key === 'Escape') setShowNewFolder(false);
                       }}
                       placeholder="新分類名稱"
-                      className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                      className="flex-1 min-w-0 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded focus:outline-none focus:ring-1 focus:ring-indigo-400"
                     />
                     <button
                       onClick={handleCreateFolder}
@@ -1073,14 +1073,14 @@ export default function Diary() {
               {/* Tags */}
               {!isNew && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">標籤</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">標籤</label>
                   <div className="flex flex-wrap gap-1.5 mb-2">
                     {editTags.map((t) => {
                       const tagObj = tags.find((x) => x.name === t);
                       return (
                         <span
                           key={t}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                           style={
                             tagObj?.color
                               ? { backgroundColor: tagObj.color + '22', color: tagObj.color }
@@ -1109,11 +1109,11 @@ export default function Diary() {
                         }
                       }}
                       placeholder="輸入標籤後按 Enter"
-                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                      className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                     />
                     <button
                       onClick={addTag}
-                      className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200 transition-colors"
+                      className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                     >
                       新增
                     </button>
@@ -1123,13 +1123,13 @@ export default function Diary() {
 
               {/* Images */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">圖片</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">圖片</label>
 
                 {/* Existing images (edit mode) */}
                 {!isNew && selectedEntry?.images && selectedEntry.images.length > 0 && (
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {selectedEntry.images.map(img => (
-                      <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                         <img src={img.url} alt={img.filename} className="w-full h-full object-cover" />
                         <button
                           onClick={() => handleDeleteImage(img.id)}
@@ -1146,10 +1146,10 @@ export default function Diary() {
                 {pendingPreviews.length > 0 && (
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {pendingPreviews.map((url, i) => (
-                      <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                      <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                         <img src={url} alt="" className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
-                          <span className="text-[10px] text-indigo-700 bg-white/80 px-1.5 py-0.5 rounded font-medium">待上傳</span>
+                          <span className="text-[10px] text-indigo-700 bg-white/80 dark:bg-gray-900/80 px-1.5 py-0.5 rounded font-medium">待上傳</span>
                         </div>
                         <button
                           onClick={() => removePendingImage(i)}
@@ -1170,7 +1170,7 @@ export default function Diary() {
                   onDrop={e => { e.preventDefault(); addPendingImages(e.dataTransfer.files); }}
                   onClick={() => imageInputRef.current?.click()}
                   onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') imageInputRef.current?.click(); }}
-                  className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                  className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 text-center hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer"
                 >
                   {uploadingImages ? (
                     <div className="flex items-center justify-center gap-2 text-indigo-500">
@@ -1179,9 +1179,9 @@ export default function Diary() {
                     </div>
                   ) : (
                     <>
-                      <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300" />
-                      <p className="text-sm text-gray-400">拖放、點擊或貼上圖片 (Ctrl+V)</p>
-                      <p className="text-xs text-gray-300 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
+                      <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300 dark:text-gray-600" />
+                      <p className="text-sm text-gray-400 dark:text-gray-500">拖放、點擊或貼上圖片 (Ctrl+V)</p>
+                      <p className="text-xs text-gray-300 dark:text-gray-600 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
                     </>
                   )}
                 </div>
@@ -1200,7 +1200,7 @@ export default function Diary() {
           /* ── VIEW MODE ────────────────────────────────────────── */
           <div className="flex flex-col h-full">
             {/* View header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
               <div className="min-w-0 flex-1 mr-2">
                 {editingTitle ? (
                   <input
@@ -1212,12 +1212,12 @@ export default function Diary() {
                       if (e.key === 'Enter') handleSaveTitle();
                       if (e.key === 'Escape') setEditingTitle(false);
                     }}
-                    className="w-full font-semibold text-gray-900 bg-transparent border-b border-indigo-400 focus:outline-none text-base"
+                    className="w-full font-semibold text-gray-900 dark:text-gray-100 bg-transparent border-b border-indigo-400 focus:outline-none text-base"
                   />
                 ) : (
                   <div className="flex items-center gap-2">
                     <h3
-                      className="font-semibold text-gray-900 truncate cursor-pointer hover:text-indigo-600 transition-colors"
+                      className="font-semibold text-gray-900 dark:text-gray-100 truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                       title="點擊編輯標題"
                       onClick={() => { setTitleDraft(selectedEntry.title); setEditingTitle(true); }}
                     >
@@ -1228,21 +1228,21 @@ export default function Diary() {
                     )}
                   </div>
                 )}
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
                   {formatDateTime(selectedEntry.created_at)}
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={() => startEdit(selectedEntry)}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-colors"
                 >
                   <Pencil size={14} />
                   編輯
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                 >
                   <Trash2 size={14} />
                   刪除
@@ -1264,7 +1264,7 @@ export default function Diary() {
                           setActiveTag(t);
                           setActiveFolder(null);
                         }}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                         style={
                           tagObj?.color
                             ? { backgroundColor: tagObj.color + '22', color: tagObj.color }
@@ -1280,7 +1280,7 @@ export default function Diary() {
               )}
 
               {/* Content */}
-              <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+              <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line">
                 {selectedEntry.content}
               </div>
 
@@ -1293,14 +1293,14 @@ export default function Diary() {
               <div className="mt-6 space-y-3">
                 {/* Header + button */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700 dark:text-indigo-400">
                     <Sparkles size={16} />
                     AI 好友分析
                   </div>
                   <button
                     onClick={() => handleAnalyze()}
                     disabled={analyzing}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg transition-colors disabled:opacity-50"
                   >
                     {analyzing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                     {selectedEntry.ai_reflection ? '重新分析' : '開始分析'}
@@ -1317,18 +1317,18 @@ export default function Diary() {
                       <div className="text-xs text-gray-500 italic px-1">{dispatchSummary}</div>
                     )}
                     {Object.entries(agentThinking).map(([id, agent]) => (
-                      <div key={id} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                      <div key={id} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-700">
                           <span>{agent.emoji}</span>
-                          <span className="text-sm font-medium text-gray-900">{agent.name}</span>
-                          <span className="text-xs text-gray-400">{agent.role}</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{agent.name}</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">{agent.role}</span>
                           {agentReasons[id] && (
-                            <span className="text-[10px] text-gray-400 italic ml-1">— {agentReasons[id]}</span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-1">— {agentReasons[id]}</span>
                           )}
                           {!agent.done && analyzing && <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />}
                           {agent.done && <span className="text-xs text-green-500 ml-auto">✓</span>}
                         </div>
-                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto">
+                        <div className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 leading-relaxed whitespace-pre-line max-h-32 overflow-y-auto">
                           {agent.text || <span className="text-gray-300 italic">思考中...</span>}
                         </div>
                       </div>
@@ -1336,14 +1336,14 @@ export default function Diary() {
 
                     {/* Synthesis streaming */}
                     {synthesisText && (
-                      <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 overflow-hidden">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-indigo-100/50 border-b border-indigo-200">
+                      <div className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/20 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-indigo-100/50 dark:bg-indigo-900/30 border-b border-indigo-200 dark:border-indigo-800">
                           <span>🧠</span>
-                          <span className="text-sm font-medium text-indigo-900">整合者</span>
-                          <span className="text-xs text-indigo-400">彙整觀點</span>
+                          <span className="text-sm font-medium text-indigo-900 dark:text-indigo-300">整合者</span>
+                          <span className="text-xs text-indigo-400 dark:text-indigo-500">彙整觀點</span>
                           {analyzing && <Loader2 size={12} className="animate-spin text-indigo-400 ml-auto" />}
                         </div>
-                        <div className="px-3 py-2 text-xs text-indigo-800 leading-relaxed whitespace-pre-line">
+                        <div className="px-3 py-2 text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed whitespace-pre-line">
                           {synthesisText}
                         </div>
                       </div>
@@ -1362,15 +1362,15 @@ export default function Diary() {
 
                 {/* Final Reflection (always shown if available) */}
                 {!analyzing && selectedEntry.ai_reflection && !showThinking && (
-                  <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
-                    <div className="prose prose-sm text-indigo-900/80 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>h1]:text-indigo-900 [&>h2]:text-indigo-900 [&>h3]:text-indigo-800 [&>strong]:text-indigo-900">
+                  <div className="rounded-xl bg-indigo-50/60 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
+                    <div className="prose prose-sm text-indigo-900/80 dark:text-indigo-300 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>h1]:text-indigo-900 [&>h2]:text-indigo-900 [&>h3]:text-indigo-800 [&>strong]:text-indigo-900 dark:[&>h1]:text-indigo-300 dark:[&>h2]:text-indigo-300 dark:[&>h3]:text-indigo-400 dark:[&>strong]:text-indigo-300">
                       <ReactMarkdown>{selectedEntry.ai_reflection}</ReactMarkdown>
                     </div>
                     {/* Collapsed agent results */}
                     {selectedEntry.ai_agents && selectedEntry.ai_agents.length > 0 && (
                       <button
                         onClick={() => setShowThinking(true)}
-                        className="mt-2 text-xs text-indigo-400 hover:text-indigo-600"
+                        className="mt-2 text-xs text-indigo-400 dark:text-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400"
                       >
                         查看 {selectedEntry.ai_agents.length} 位好友的分析過程
                       </button>
@@ -1382,29 +1382,29 @@ export default function Diary() {
                 {!analyzing && showThinking && selectedEntry.ai_agents && selectedEntry.ai_agents.length > 0 && Object.keys(agentThinking).length === 0 && (
                   <div className="space-y-2">
                     {selectedEntry.ai_agents.map(agent => (
-                      <div key={agent.agentId} className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                      <div key={agent.agentId} className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
+                        <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-700 border-b border-gray-100 dark:border-gray-700">
                           <span>{agent.emoji}</span>
-                          <span className="text-sm font-medium text-gray-900">{agent.name}</span>
-                          <span className="text-xs text-gray-400">{agent.role}</span>
+                          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{agent.name}</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500">{agent.role}</span>
                           <span className="text-xs text-green-500 ml-auto">✓</span>
                         </div>
-                        <div className="px-3 py-2 text-xs text-gray-600 leading-relaxed max-h-48 overflow-y-auto prose prose-xs max-w-none [&>p]:my-0.5 [&>ul]:my-0.5 [&>ol]:my-0.5 [&>strong]:text-gray-800">
+                        <div className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400 leading-relaxed max-h-48 overflow-y-auto prose prose-xs max-w-none [&>p]:my-0.5 [&>ul]:my-0.5 [&>ol]:my-0.5 [&>strong]:text-gray-800 dark:[&>strong]:text-gray-300">
                           <ReactMarkdown>{agent.result}</ReactMarkdown>
                         </div>
                       </div>
                     ))}
                     {selectedEntry.ai_reflection && (
-                      <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
-                        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 mb-1">
+                      <div className="rounded-xl bg-indigo-50/60 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-400 mb-1">
                           🧠 整合回饋
                         </div>
-                        <div className="prose prose-sm text-indigo-900/80 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>strong]:text-indigo-900">
+                        <div className="prose prose-sm text-indigo-900/80 dark:text-indigo-300 leading-relaxed max-w-none [&>p]:my-1.5 [&>ul]:my-1.5 [&>ol]:my-1.5 [&>strong]:text-indigo-900 dark:[&>strong]:text-indigo-300">
                           <ReactMarkdown>{selectedEntry.ai_reflection}</ReactMarkdown>
                         </div>
                       </div>
                     )}
-                    <button onClick={() => setShowThinking(false)} className="text-xs text-gray-400 hover:text-gray-600">
+                    <button onClick={() => setShowThinking(false)} className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                       收起思考過程
                     </button>
                   </div>
@@ -1412,8 +1412,8 @@ export default function Diary() {
 
                 {/* Empty state */}
                 {!analyzing && !selectedEntry.ai_reflection && !showThinking && (
-                  <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
-                    <p className="text-sm text-indigo-400 italic">
+                  <div className="rounded-xl bg-indigo-50/60 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
+                    <p className="text-sm text-indigo-400 dark:text-indigo-500 italic">
                       點擊「開始分析」讓 AI 好友團隊給你多角度的回饋
                     </p>
                   </div>
@@ -1426,11 +1426,11 @@ export default function Diary() {
 
       {/* ── Mobile Detail Overlay (shown on md screens when entry selected) ── */}
       {selectedEntry && !editMode && (
-        <div className="fixed inset-0 z-40 bg-white flex flex-col lg:hidden">
-          <div className="flex items-center justify-between p-4 border-b border-gray-100">
+        <div className="fixed inset-0 z-40 bg-white dark:bg-gray-900 flex flex-col lg:hidden">
+          <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
             <button
               onClick={() => setSelectedEntry(null)}
-              className="flex items-center gap-1 text-sm text-gray-600"
+              className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400"
             >
               <ChevronRight size={16} className="rotate-180" />
               返回列表
@@ -1438,13 +1438,13 @@ export default function Diary() {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => startEdit(selectedEntry)}
-                className="p-2 text-gray-600 hover:text-indigo-600 rounded-lg transition-colors"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg transition-colors"
               >
                 <Pencil size={16} />
               </button>
               <button
                 onClick={handleDelete}
-                className="p-2 text-gray-600 hover:text-red-600 rounded-lg transition-colors"
+                className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-lg transition-colors"
               >
                 <Trash2 size={16} />
               </button>
@@ -1453,12 +1453,12 @@ export default function Diary() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-gray-900">{selectedEntry.title}</h3>
+                <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100">{selectedEntry.title}</h3>
                 {selectedEntry.mood && (
                   <span className="text-xl">{MOOD_MAP[selectedEntry.mood] ?? selectedEntry.mood}</span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-1">{formatDateTime(selectedEntry.created_at)}</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatDateTime(selectedEntry.created_at)}</p>
             </div>
 
             {selectedEntry.tags.length > 0 && (
@@ -1468,7 +1468,7 @@ export default function Diary() {
                   return (
                     <span
                       key={t}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                       style={
                         tagObj?.color
                           ? { backgroundColor: tagObj.color + '22', color: tagObj.color }
@@ -1483,7 +1483,7 @@ export default function Diary() {
               </div>
             )}
 
-            <div className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+            <div className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-line">
               {selectedEntry.content}
             </div>
 
@@ -1493,29 +1493,29 @@ export default function Diary() {
             )}
 
             {/* Mobile AI Section */}
-            <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-4">
+            <div className="rounded-xl bg-indigo-50/60 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700">
+                <div className="flex items-center gap-1.5 text-sm font-semibold text-indigo-700 dark:text-indigo-400">
                   <Sparkles size={16} />
                   AI 好友分析
                 </div>
                 <button
                   onClick={() => handleAnalyze()}
                   disabled={analyzing}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 rounded-lg transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/30 rounded-lg transition-colors disabled:opacity-50"
                 >
                   {analyzing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
                   {selectedEntry.ai_reflection ? '重新分析' : '開始分析'}
                 </button>
               </div>
               {analyzing ? (
-                <div className="text-xs text-indigo-500">{analysisPhase || '分析中...'}</div>
+                <div className="text-xs text-indigo-500 dark:text-indigo-400">{analysisPhase || '分析中...'}</div>
               ) : selectedEntry.ai_reflection ? (
-                <p className="text-sm text-indigo-900/80 leading-relaxed whitespace-pre-line">
+                <p className="text-sm text-indigo-900/80 dark:text-indigo-300 leading-relaxed whitespace-pre-line">
                   {selectedEntry.ai_reflection}
                 </p>
               ) : (
-                <p className="text-sm text-indigo-400 italic">
+                <p className="text-sm text-indigo-400 dark:text-indigo-500 italic">
                   點擊「開始分析」讓 AI 好友團隊給你回饋
                 </p>
               )}
@@ -1526,15 +1526,15 @@ export default function Diary() {
 
       {/* ── Mobile Edit Overlay ─────────────────────────────────── */}
       {editMode && (
-        <div className="fixed inset-0 z-40 bg-white flex flex-col lg:hidden" onPaste={handleEditPaste}>
-          <div className="flex items-center justify-between p-4 border-b border-gray-100">
-            <h3 className="font-semibold text-gray-900">
+        <div className="fixed inset-0 z-40 bg-white dark:bg-gray-900 flex flex-col lg:hidden" onPaste={handleEditPaste}>
+          <div className="flex items-center justify-between p-4 border-b border-gray-100 dark:border-gray-700">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">
               {isNew ? '新增日記' : '編輯日記'}
             </h3>
             <div className="flex items-center gap-2">
               <button
                 onClick={cancelEdit}
-                className="px-3 py-1.5 text-sm text-gray-600"
+                className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400"
               >
                 取消
               </button>
@@ -1550,26 +1550,26 @@ export default function Diary() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">標題</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">標題</label>
               <input
                 value={editTitle}
                 onChange={(e) => setEditTitle(e.target.value)}
                 placeholder="為這篇日記取個標題..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">內容</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">內容</label>
               <textarea
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 placeholder="寫下你的心情與想法..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-y"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent resize-y"
                 style={{ minHeight: '200px' }}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">心情</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">心情</label>
               <div className="flex flex-wrap gap-2">
                 {MOOD_ENTRIES.map(([key, emoji]) => (
                   <button
@@ -1577,8 +1577,8 @@ export default function Diary() {
                     onClick={() => setEditMood(editMood === key ? null : key)}
                     className={`w-10 h-10 rounded-lg text-xl flex items-center justify-center transition-all ${
                       editMood === key
-                        ? 'bg-indigo-100 ring-2 ring-indigo-400 scale-110'
-                        : 'bg-gray-50 hover:bg-gray-100'
+                        ? 'bg-indigo-100 dark:bg-indigo-900/30 ring-2 ring-indigo-400 scale-110'
+                        : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                   >
                     {emoji}
@@ -1587,11 +1587,11 @@ export default function Diary() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">資料夾</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">資料夾</label>
               <select
                 value={editFolderId ?? ''}
                 onChange={(e) => setEditFolderId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent bg-white"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
               >
                 <option value="">未分類</option>
                 {folders.map((f) => (
@@ -1603,12 +1603,12 @@ export default function Diary() {
             </div>
             {!isNew && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">標籤</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">標籤</label>
                 <div className="flex flex-wrap gap-1.5 mb-2">
                   {editTags.map((t) => (
                     <span
                       key={t}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400"
                     >
                       {t}
                       <button onClick={() => removeTag(t)}>
@@ -1628,11 +1628,11 @@ export default function Diary() {
                       }
                     }}
                     placeholder="輸入標籤後按 Enter"
-                    className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
+                    className="flex-1 px-3 py-1.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
                   />
                   <button
                     onClick={addTag}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-600 text-sm rounded-lg hover:bg-gray-200"
+                    className="px-3 py-1.5 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
                   >
                     新增
                   </button>
@@ -1642,13 +1642,13 @@ export default function Diary() {
 
             {/* Images */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">圖片</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">圖片</label>
 
               {/* Existing images (edit mode) */}
               {!isNew && selectedEntry?.images && selectedEntry.images.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {selectedEntry.images.map(img => (
-                    <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                    <div key={img.id} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                       <img src={img.url} alt={img.filename} className="w-full h-full object-cover" />
                       <button
                         onClick={() => handleDeleteImage(img.id)}
@@ -1665,7 +1665,7 @@ export default function Diary() {
               {pendingPreviews.length > 0 && (
                 <div className="grid grid-cols-3 gap-2 mb-3">
                   {pendingPreviews.map((url, i) => (
-                    <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100">
+                    <div key={i} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
                       <img src={url} alt="" className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-indigo-500/10 flex items-center justify-center">
                         <span className="text-[10px] text-indigo-700 bg-white/80 px-1.5 py-0.5 rounded font-medium">待上傳</span>
@@ -1689,7 +1689,7 @@ export default function Diary() {
                 onDrop={e => { e.preventDefault(); addPendingImages(e.dataTransfer.files); }}
                 onClick={() => mobileImageInputRef.current?.click()}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') mobileImageInputRef.current?.click(); }}
-                className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+                className="border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-xl p-5 text-center hover:border-indigo-300 dark:hover:border-indigo-600 hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors cursor-pointer"
               >
                 {uploadingImages ? (
                   <div className="flex items-center justify-center gap-2 text-indigo-500">
@@ -1698,9 +1698,9 @@ export default function Diary() {
                   </div>
                 ) : (
                   <>
-                    <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300" />
-                    <p className="text-sm text-gray-400">拖放、點擊或貼上圖片 (Ctrl+V)</p>
-                    <p className="text-xs text-gray-300 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
+                    <ImageIcon size={22} className="mx-auto mb-1.5 text-gray-300 dark:text-gray-600" />
+                    <p className="text-sm text-gray-400 dark:text-gray-500">拖放、點擊或貼上圖片 (Ctrl+V)</p>
+                    <p className="text-xs text-gray-300 dark:text-gray-600 mt-0.5">PNG · JPG · GIF · WEBP · 最大 10MB</p>
                   </>
                 )}
               </div>

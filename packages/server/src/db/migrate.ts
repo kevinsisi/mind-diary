@@ -207,5 +207,11 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''");
   }
 
+  // Add custom_instructions column to users if it doesn't exist
+  const userColsRefreshed = db.prepare("PRAGMA table_info(users)").all() as any[];
+  if (!userColsRefreshed.some((c: any) => c.name === "custom_instructions")) {
+    db.exec("ALTER TABLE users ADD COLUMN custom_instructions TEXT NOT NULL DEFAULT ''");
+  }
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

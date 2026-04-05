@@ -148,13 +148,13 @@ export default function Dashboard() {
   return (
     <div className="max-w-4xl">
       {!user && (
-        <div className="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-400">
           您目前以訪客身份瀏覽，資料為公共空間。<a href="/login" className="underline font-medium ml-1">登入</a>以存取個人資料。
         </div>
       )}
       {/* Search Bar — top of page */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 bg-white rounded-xl shadow-md px-5 py-3.5 ring-1 ring-gray-200 focus-within:ring-2 focus-within:ring-indigo-400 transition-shadow">
+        <div className="flex items-center gap-3 bg-white dark:bg-gray-900 rounded-xl shadow-md px-5 py-3.5 ring-1 ring-gray-200 dark:ring-gray-700 focus-within:ring-2 focus-within:ring-indigo-400 transition-shadow">
           <Search className="w-5 h-5 text-gray-400 shrink-0" />
           <input
             type="text"
@@ -162,13 +162,13 @@ export default function Dashboard() {
             onChange={(e) => handleSearchChange(e.target.value)}
             onKeyDown={handleSearchKeyDown}
             placeholder="搜尋日記、對話、標籤..."
-            className="flex-1 text-lg outline-none bg-transparent placeholder-gray-400"
+            className="flex-1 text-lg outline-none bg-transparent placeholder-gray-400 dark:placeholder-gray-500 text-gray-900 dark:text-gray-100"
             autoFocus
           />
           {searchQuery && (
             <button
               onClick={() => handleSearchChange('')}
-              className="text-gray-400 hover:text-gray-600 text-sm px-2"
+              className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 text-sm px-2"
             >
               清除
             </button>
@@ -180,14 +180,14 @@ export default function Dashboard() {
       {isSearchActive && (
         <div className="mb-6">
           {searchLoading && (
-            <div className="flex items-center justify-center gap-2 py-8 text-gray-500">
+            <div className="flex items-center justify-center gap-2 py-8 text-gray-500 dark:text-gray-400">
               <Loader2 className="w-5 h-5 animate-spin" />
               <span>搜尋中...</span>
             </div>
           )}
 
           {hasSearched && !searchLoading && searchResults.length === 0 && (
-            <div className="flex flex-col items-center py-8 text-gray-400">
+            <div className="flex flex-col items-center py-8 text-gray-400 dark:text-gray-500">
               <Search className="w-8 h-8 mb-2" />
               <p className="text-sm">找不到符合的結果，試試其他關鍵字</p>
             </div>
@@ -195,7 +195,7 @@ export default function Dashboard() {
 
           {!searchLoading && searchResults.length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-gray-400 mb-2">找到 {searchResults.length} 筆結果</p>
+              <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">找到 {searchResults.length} 筆結果</p>
               {searchResults.map((result) => (
                 <button
                   key={`${result.source}-${result.id}`}
@@ -204,7 +204,7 @@ export default function Dashboard() {
                     else if (result.source === 'chat') navigate('/chat');
                     else navigate('/files');
                   }}
-                  className="w-full text-left bg-white rounded-lg border border-gray-200 p-3.5 hover:shadow-md hover:border-indigo-200 transition-all"
+                  className="w-full text-left bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-3.5 hover:shadow-md hover:border-indigo-200 dark:hover:border-indigo-700 transition-all"
                 >
                   <div className="flex items-center gap-2 mb-1">
                     {result.source === 'diary' ? (
@@ -223,17 +223,17 @@ export default function Dashboard() {
                         檔案
                       </span>
                     )}
-                    <span className="text-sm font-medium text-gray-900 truncate">{result.title}</span>
-                    <span className="text-[10px] text-gray-400 ml-auto flex-shrink-0">{formatDate(result.created_at)}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{result.title}</span>
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 ml-auto flex-shrink-0">{formatDate(result.created_at)}</span>
                   </div>
                   <p
-                    className="text-xs text-gray-500 line-clamp-2 [&_mark]:bg-yellow-200 [&_mark]:text-yellow-900 [&_mark]:rounded-sm [&_mark]:px-0.5"
+                    className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 [&_mark]:bg-yellow-200 [&_mark]:text-yellow-900 [&_mark]:rounded-sm [&_mark]:px-0.5"
                     dangerouslySetInnerHTML={{ __html: result.snippet }}
                   />
                   {result.tags && result.tags.length > 0 && (
                     <div className="flex gap-1 mt-1.5">
                       {result.tags.slice(0, 4).map(t => (
-                        <span key={t} className="px-1.5 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded">
+                        <span key={t} className="px-1.5 py-0.5 text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded">
                           {t}
                         </span>
                       ))}
@@ -268,71 +268,71 @@ export default function Dashboard() {
 
       {/* Stats Row — compact */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="text-xs text-gray-500 mb-0.5">日記總數</div>
-          <div className="text-xl font-bold text-gray-900">{totalEntries}</div>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">日記總數</div>
+          <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{totalEntries}</div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="text-xs text-gray-500 mb-0.5">標籤數</div>
-          <div className="text-xl font-bold text-gray-900">{tags.length}</div>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-0.5">標籤數</div>
+          <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{tags.length}</div>
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-3">
-          <div className="flex items-center gap-1 text-xs text-gray-500 mb-0.5">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+          <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mb-0.5">
             <BarChart3 className="w-3 h-3" />
             AI（7天）
           </div>
-          <div className="text-xl font-bold text-gray-900">{usage?.last7d.calls || 0} <span className="text-xs font-normal text-gray-400">次</span></div>
+          <div className="text-xl font-bold text-gray-900 dark:text-gray-100">{usage?.last7d.calls || 0} <span className="text-xs font-normal text-gray-400 dark:text-gray-500">次</span></div>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         {/* Recent Entries */}
-        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+        <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
               最近日記
             </h2>
-            <button onClick={() => navigate('/diary')} className="text-xs text-indigo-600 hover:text-indigo-800">
+            <button onClick={() => navigate('/diary')} className="text-xs text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300">
               查看全部
             </button>
           </div>
           {entries.length === 0 ? (
             <div className="p-6 text-center">
-              <BookOpen className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">還沒有日記</p>
+              <BookOpen className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
+              <p className="text-sm text-gray-400 dark:text-gray-500">還沒有日記</p>
               <button
                 onClick={() => navigate('/diary')}
-                className="mt-2 text-sm text-indigo-600 hover:text-indigo-800"
+                className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300"
               >
                 寫第一篇日記 →
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-gray-50">
+            <div className="divide-y divide-gray-50 dark:divide-gray-800">
               {entries.map(entry => (
                 <button
                   key={entry.id}
                   onClick={() => navigate('/diary')}
-                  className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors"
+                  className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                 >
                   <div className="flex items-center gap-2 mb-0.5">
                     {entry.mood && <span className="text-sm">{MOOD_MAP[entry.mood] || ''}</span>}
-                    <span className="text-sm font-medium text-gray-900 truncate">{entry.title}</span>
-                    <span className="text-xs text-gray-400 ml-auto flex-shrink-0">{timeAgo(entry.created_at)}</span>
+                    <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{entry.title}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500 ml-auto flex-shrink-0">{timeAgo(entry.created_at)}</span>
                   </div>
-                  <p className="text-xs text-gray-500 line-clamp-1">{entry.content}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{entry.content}</p>
                   {entry.tags.length > 0 && (
                     <div className="flex gap-1 mt-1">
                       {entry.tags.slice(0, 3).map(t => (
-                        <span key={t} className="px-1.5 py-0.5 text-[10px] bg-indigo-50 text-indigo-600 rounded">
+                        <span key={t} className="px-1.5 py-0.5 text-[10px] bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded">
                           {t}
                         </span>
                       ))}
                     </div>
                   )}
                   {entry.ai_reflection && (
-                    <div className="flex items-center gap-1 mt-1 text-[10px] text-indigo-400">
+                    <div className="flex items-center gap-1 mt-1 text-[10px] text-indigo-400 dark:text-indigo-500">
                       <Sparkles className="w-3 h-3" />
                       AI 已分析
                     </div>
@@ -344,15 +344,15 @@ export default function Dashboard() {
         </div>
 
         {/* Tags + AI Friends */}
-        <div className="bg-white border border-gray-200 rounded-xl">
-          <div className="px-4 py-3 border-b border-gray-100">
-            <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl">
+          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+            <h2 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
               <Tag className="w-4 h-4" />
               熱門標籤
             </h2>
           </div>
           {tags.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400">
+            <div className="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
               寫日記後 AI 會自動產生標籤
             </div>
           ) : (
@@ -370,8 +370,8 @@ export default function Dashboard() {
           )}
 
           {/* AI Friends */}
-          <div className="px-4 py-3 border-t border-gray-100">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2">🏡 夥伴小屋</h3>
+          <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-700">
+            <h3 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">🏡 夥伴小屋</h3>
             <div className="space-y-1.5">
               {[
                 { emoji: '😄', name: '樂樂', role: '正向鼓勵師' },
@@ -390,8 +390,8 @@ export default function Dashboard() {
               ].map(agent => (
                 <div key={agent.name} className="flex items-center gap-2 text-xs">
                   <span>{agent.emoji}</span>
-                  <span className="font-medium text-gray-700">{agent.name}</span>
-                  <span className="text-gray-400">{agent.role}</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">{agent.name}</span>
+                  <span className="text-gray-400 dark:text-gray-500">{agent.role}</span>
                 </div>
               ))}
             </div>
