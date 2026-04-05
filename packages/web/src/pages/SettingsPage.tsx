@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Key, Plus, Trash2, Upload, Shield, ShieldOff, BarChart3, RefreshCw } from 'lucide-react';
+import { Key, Plus, Trash2, Upload, Shield, ShieldOff, BarChart3, RefreshCw, Globe } from 'lucide-react';
 import { apiClient } from '../api/client';
+import { useSiteConfig } from '../context/SiteConfigContext';
 
 interface ApiKey {
   id: number;
@@ -28,6 +29,9 @@ interface UsageStats {
 }
 
 export default function SettingsPage() {
+  const { siteTitle, updateSiteTitle } = useSiteConfig();
+  const [titleInput, setTitleInput] = useState(siteTitle);
+  const [titleSaving, setTitleSaving] = useState(false);
   const [keys, setKeys] = useState<ApiKey[]>([]);
   const [usage, setUsage] = useState<UsageStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,6 +41,9 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [adding, setAdding] = useState(false);
+
+  // Sync input when context loads the persisted title
+  useEffect(() => { setTitleInput(siteTitle); }, [siteTitle]);
 
   const clearMessages = () => { setError(''); setSuccess(''); };
 
@@ -63,6 +70,21 @@ export default function SettingsPage() {
   }, [loadKeys, loadUsage]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleSaveTitle = async () => {
+    const trimmed = titleInput.trim();
+    if (!trimmed || trimmed === siteTitle) return;
+    setTitleSaving(true);
+    clearMessages();
+    try {
+      await updateSiteTitle(trimmed);
+      setSuccess('網站標題已更新');
+    } catch {
+      setError('儲存標題失敗');
+    } finally {
+      setTitleSaving(false);
+    }
+  };
 
   const handleAddKey = async () => {
     clearMessages();
@@ -177,6 +199,32 @@ export default function SettingsPage() {
           ))}
         </div>
       )}
+
+      {/* Site Title */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <Globe className="w-5 h-5" />
+          網站標題
+        </h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={titleInput}
+            onChange={(e) => setTitleInput(e.target.value)}
+            placeholder="輸入網站標題"
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
+          />
+          <button
+            onClick={handleSaveTitle}
+            disabled={titleSaving || !titleInput.trim() || titleInput.trim() === siteTitle}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {titleSaving ? '儲存中…' : '儲存'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">修改後會即時反映在側邊欄、瀏覽器 tab 標題及登入頁面</p>
+      </div>
 
       {/* Add Key */}
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">

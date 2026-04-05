@@ -158,4 +158,43 @@ router.get("/usage", (_req: Request, res: Response) => {
   }
 });
 
+// GET /api/settings/config — get site config (public, no auth required)
+router.get("/config", (_req: Request, res: Response) => {
+  try {
+    const row = sqlite
+      .prepare(`SELECT value FROM settings WHERE key = 'site_title'`)
+      .get() as { value: string } | undefined;
+    res.json({ site_title: row?.value ?? "心靈日記" });
+  } catch (err: any) {
+    console.error("[settings] Get config error:", err);
+    res.status(500).json({ error: err.message || "查詢失敗" });
+  }
+});
+
+// PUT /api/settings/config — update site config
+router.put("/config", (req: Request, res: Response) => {
+  try {
+    const { site_title } = req.body;
+
+    if (typeof site_title !== "string" || site_title.trim().length === 0) {
+      return res.status(400).json({ error: "網站標題不能為空" });
+    }
+
+    const trimmed = site_title.trim();
+
+    sqlite
+      .prepare(
+        `INSERT INTO settings (key, value, updated_at)
+         VALUES ('site_title', ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+      )
+      .run(trimmed, Date.now());
+
+    res.json({ site_title: trimmed });
+  } catch (err: any) {
+    console.error("[settings] Update config error:", err);
+    res.status(500).json({ error: err.message || "儲存失敗" });
+  }
+});
+
 export default router;

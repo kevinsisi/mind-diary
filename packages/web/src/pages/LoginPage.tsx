@@ -2,9 +2,11 @@ import { FormEvent, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BookOpen, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useSiteConfig } from '../context/SiteConfigContext';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { siteTitle } = useSiteConfig();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: Location })?.from?.pathname ?? '/';
@@ -36,7 +38,7 @@ export default function LoginPage() {
           <div className="flex items-center justify-center w-14 h-14 rounded-full bg-indigo-100 mb-3">
             <BookOpen className="text-indigo-600" size={28} />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">心靈日記</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{siteTitle}</h1>
           <p className="text-sm text-gray-500 mt-1">請登入您的帳號</p>
         </div>
 

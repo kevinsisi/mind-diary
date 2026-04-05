@@ -15,6 +15,7 @@ import {
   UserCircle,
 } from 'lucide-react';
 import { useAuth } from './context/AuthContext';
+import { useSiteConfig } from './context/SiteConfigContext';
 import PrivateRoute from './components/PrivateRoute';
 import Dashboard from './pages/Dashboard';
 import Files from './pages/Files';
@@ -95,6 +96,7 @@ function SidebarFooter() {
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { siteTitle } = useSiteConfig();
 
   return (
     <Routes>
@@ -121,7 +123,7 @@ export default function App() {
               `}
             >
               <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 shrink-0">
-                <h1 className="text-lg font-bold text-indigo-600">心靈日記</h1>
+                <h1 className="text-lg font-bold text-indigo-600">{siteTitle}</h1>
                 <button
                   className="lg:hidden p-1 rounded hover:bg-gray-100"
                   onClick={() => setSidebarOpen(false)}
@@ -162,7 +164,7 @@ export default function App() {
                 >
                   <Menu size={22} />
                 </button>
-                <h1 className="ml-3 text-lg font-bold text-indigo-600">心靈日記</h1>
+                <h1 className="ml-3 text-lg font-bold text-indigo-600">{siteTitle}</h1>
               </header>
 
               <main className="flex-1 overflow-y-auto p-6">
