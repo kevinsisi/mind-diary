@@ -524,6 +524,12 @@ export default function Diary() {
   }
 
   async function handleAnalyze(entry?: DiaryEntry) {
+    // Abort any ongoing analysis before starting a new one — prevents concurrent
+    // SSE streams from polluting shared display state and prematurely clearing analyzing flag
+    if (analysisAbortRef.current) {
+      analysisAbortRef.current.abort();
+    }
+
     const target = entry || selectedEntry;
     if (!target) return;
     setAnalyzing(true);
@@ -631,20 +637,25 @@ export default function Diary() {
       }
       // AbortError: backend still processing, will reload in finally
     } finally {
-      analysisAbortRef.current = null;
-      // If SSE ended without complete (abort / connection drop), reload entry from DB
-      // Backend continues processing and saves result even after client disconnects
-      if (!gotComplete) {
-        try {
-          const fresh = await apiClient.get<DiaryEntry>(`/api/diary/${target.id}`);
-          if (fresh?.ai_reflection) {
-            setSelectedEntry(prev => prev?.id === target.id ? { ...prev, ...fresh } : prev);
-            setEntries(prev => prev.map(e => e.id === target.id ? fresh : e));
-            fetchTags();
-          }
-        } catch { /* ignore */ }
+      // Only clean up if this is still the active analysis — if a newer handleAnalyze
+      // has already started, it will have replaced analysisAbortRef.current with its
+      // own controller and should NOT be interrupted by this stale finally block
+      if (analysisAbortRef.current === abortCtrl) {
+        analysisAbortRef.current = null;
+        // If SSE ended without complete (abort / connection drop), reload entry from DB
+        // Backend continues processing and saves result even after client disconnects
+        if (!gotComplete) {
+          try {
+            const fresh = await apiClient.get<DiaryEntry>(`/api/diary/${target.id}`);
+            if (fresh?.ai_reflection) {
+              setSelectedEntry(prev => prev?.id === target.id ? { ...prev, ...fresh } : prev);
+              setEntries(prev => prev.map(e => e.id === target.id ? fresh : e));
+              fetchTags();
+            }
+          } catch { /* ignore */ }
+        }
+        setAnalyzing(false);
       }
-      setAnalyzing(false);
     }
   }
 
