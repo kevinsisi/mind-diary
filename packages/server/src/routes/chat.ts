@@ -335,9 +335,9 @@ router.post(
   chatImageUpload.single("image"),
   async (req: Request, res: Response) => {
     const sessionId = Number(req.params.id);
-    const content = req.body.content;
+    const content = req.body.content || '';
 
-    if (!content) {
+    if (!content && !req.file) {
       return res.status(400).json({ error: "訊息內容不能為空" });
     }
 

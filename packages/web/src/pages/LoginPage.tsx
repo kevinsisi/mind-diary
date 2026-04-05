@@ -84,9 +84,12 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-6">
-          未登入可以「訪客模式」瀏覽公共空間
-        </p>
+        <button
+          onClick={() => navigate('/')}
+          className="mt-4 w-full text-center text-sm text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+        >
+          以訪客模式瀏覽 →
+        </button>
       </div>
     </div>
   );
