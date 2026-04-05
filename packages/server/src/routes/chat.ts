@@ -348,9 +348,11 @@ router.post(
       }
     }, 15000);
 
-    // Handle client disconnect
+    // Handle client disconnect — use res.on('close') not req.on('close'):
+    // req 'close' fires when the request body is consumed (immediately after POST body is read),
+    // whereas res 'close' fires only when the actual TCP connection drops.
     let aborted = false;
-    req.on("close", () => {
+    res.on("close", () => {
       aborted = true;
       clearInterval(heartbeat);
     });
