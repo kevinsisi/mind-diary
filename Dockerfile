@@ -3,6 +3,8 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
+RUN apk add --no-cache git
+
 # Copy root package files
 COPY package.json package-lock.json* ./
 COPY packages/server/package.json packages/server/
@@ -24,6 +26,8 @@ RUN npm run build
 FROM node:20-alpine
 
 WORKDIR /app
+
+RUN apk add --no-cache git
 
 # Copy root package files
 COPY package.json package-lock.json* ./
