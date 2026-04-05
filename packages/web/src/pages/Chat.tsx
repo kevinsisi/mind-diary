@@ -83,21 +83,37 @@ interface ChatSSEEvent {
 // ── Agent Color Map ──────────────────────────────────────────────
 
 const AGENT_COLORS: Record<string, string> = {
-  xiaoyu: '#a855f7',   // purple
-  azhe: '#14b8a6',     // teal
-  xiaoxing: '#f59e0b', // amber
-  xinxin: '#ec4899',   // pink
-  dran: '#3b82f6',     // blue
+  lele: '#f59e0b',       // amber - joy/sunny
+  youyou: '#60a5fa',     // blue - sadness/calm
+  nunu: '#ef4444',       // red - anger/fire
+  yanyan: '#6b7280',     // gray - disgust/cool
+  jingjing: '#8b5cf6',   // violet - fear/tense
+  ajiao: '#f97316',      // orange - anxiety/stressed
+  amu: '#10b981',        // emerald - envy/growth
+  axiu: '#ec4899',       // pink - embarrassment/blush
+  afei: '#a78bfa',       // purple-light - ennui/lazy
+  nianjiunai: '#d97706', // amber-dark - nostalgia/warm
+  awen: '#14b8a6',       // teal - calm/stable
+  asi: '#3b82f6',        // blue - reflection/insight
+  dran: '#059669',       // green - health/medical
 };
 
 function getAgentColor(name: string): string {
   // Try to match by known agent names in Chinese
   const nameMap: Record<string, string> = {
-    '小語': 'xiaoyu',
-    '阿哲': 'azhe',
-    '小星': 'xiaoxing',
-    '心心': 'xinxin',
-    '阿丹': 'dran',
+    '樂樂': 'lele',
+    '憂憂': 'youyou',
+    '怒怒': 'nunu',
+    '厭厭': 'yanyan',
+    '驚驚': 'jingjing',
+    '阿焦': 'ajiao',
+    '阿慕': 'amu',
+    '阿羞': 'axiu',
+    '阿廢': 'afei',
+    '念舊嬤': 'nianjiunai',
+    '阿穩': 'awen',
+    '阿思': 'asi',
+    'Dr.安': 'dran',
   };
   const agentId = nameMap[name];
   if (agentId && AGENT_COLORS[agentId]) return AGENT_COLORS[agentId];
@@ -117,7 +133,7 @@ interface ParsedAgentResponse {
 }
 
 function parseAgentResponses(content: string): ParsedAgentResponse[] | null {
-  // Match patterns like "💜 小語：[response]" separated by double newlines
+  // Match patterns like "😄 樂樂：[response]" separated by double newlines
   const agentPattern = /^([^\s]+)\s+([^\s：:]+)[：:](.+?)(?=\n[^\s]+\s+[^\s：:]+[：:]|\s*$)/gms;
   const results: ParsedAgentResponse[] = [];
 
@@ -148,11 +164,19 @@ function parseAgentResponses(content: string): ParsedAgentResponse[] | null {
 // ── Agent Role Map ───────────────────────────────────────────────
 
 const AGENT_ROLES: Record<string, string> = {
-  '小語': '心靈夥伴',
-  '阿哲': '人生導師',
-  '小星': '創意靈感',
-  '心心': '溫暖陪伴',
-  '阿丹': '理性分析',
+  '樂樂': '正向鼓勵師',
+  '憂憂': '情感陪伴者',
+  '怒怒': '界線捍衛者',
+  '厭厭': '品味守護者',
+  '驚驚': '風險警報員',
+  '阿焦': '焦慮疏導師',
+  '阿慕': '目標動力師',
+  '阿羞': '社交陪伴者',
+  '阿廢': '倦怠偵測師',
+  '念舊嬤': '記憶珍藏師',
+  '阿穩': '情緒調節師',
+  '阿思': '自我覺察師',
+  'Dr.安': '身心健康顧問',
 };
 
 // ── ThinkingCard Component ────────────────────────────────────────
@@ -202,12 +226,12 @@ function ThinkingCard({
             </div>
           )}
 
-          {/* Dispatch summary — 派遣中心 */}
+          {/* Dispatch summary — 夥伴小屋 */}
           {thinking.dispatchSummary && (
             <div className="px-3 py-2.5 border-b border-indigo-100 bg-indigo-50/60">
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-xs">🎯</span>
-                <span className="text-xs font-semibold text-indigo-700">派遣中心</span>
+                <span className="text-xs">🏡</span>
+                <span className="text-xs font-semibold text-indigo-700">夥伴小屋</span>
               </div>
               <div className="text-xs text-indigo-800 leading-relaxed">
                 {thinking.dispatchSummary}
@@ -344,12 +368,12 @@ function AssistantMessage({
     return (
       <div className="flex justify-start">
         <div className="max-w-full lg:max-w-3xl w-full space-y-2">
-          {/* Dispatch reason — 派遣中心 */}
+          {/* Dispatch reason — 夥伴小屋 */}
           {msg.dispatch_reason && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 mb-1">
               <div className="flex items-center gap-1.5 mb-1">
-                <span className="text-xs">🎯</span>
-                <span className="text-xs font-semibold text-indigo-700">派遣中心</span>
+                <span className="text-xs">🏡</span>
+                <span className="text-xs font-semibold text-indigo-700">夥伴小屋</span>
               </div>
               <div className="text-xs text-indigo-800 leading-relaxed">
                 {msg.dispatch_reason}

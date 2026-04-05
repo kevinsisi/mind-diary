@@ -371,14 +371,22 @@ export default function Dashboard() {
 
           {/* AI Friends */}
           <div className="px-4 py-3 border-t border-gray-100">
-            <h3 className="text-xs font-semibold text-gray-700 mb-2">AI 好友團隊</h3>
+            <h3 className="text-xs font-semibold text-gray-700 mb-2">🏡 夥伴小屋</h3>
             <div className="space-y-1.5">
               {[
-                { emoji: '💜', name: '小語', role: '心靈夥伴' },
-                { emoji: '🧭', name: '阿哲', role: '人生導師' },
-                { emoji: '✨', name: '小星', role: '玄學顧問' },
-                { emoji: '💕', name: '心心', role: '感情顧問' },
-                { emoji: '🏥', name: 'Dr.安', role: '健康顧問' },
+                { emoji: '😄', name: '樂樂', role: '正向鼓勵師' },
+                { emoji: '🩵', name: '憂憂', role: '情感陪伴者' },
+                { emoji: '🔥', name: '怒怒', role: '界線捍衛者' },
+                { emoji: '😒', name: '厭厭', role: '品味守護者' },
+                { emoji: '😨', name: '驚驚', role: '風險警報員' },
+                { emoji: '😰', name: '阿焦', role: '焦慮疏導師' },
+                { emoji: '🌟', name: '阿慕', role: '目標動力師' },
+                { emoji: '🙈', name: '阿羞', role: '社交陪伴者' },
+                { emoji: '🛋️', name: '阿廢', role: '倦怠偵測師' },
+                { emoji: '👵', name: '念舊嬤', role: '記憶珍藏師' },
+                { emoji: '🧘', name: '阿穩', role: '情緒調節師' },
+                { emoji: '🔍', name: '阿思', role: '自我覺察師' },
+                { emoji: '🏥', name: 'Dr.安', role: '身心健康顧問' },
               ].map(agent => (
                 <div key={agent.name} className="flex items-center gap-2 text-xs">
                   <span>{agent.emoji}</span>

@@ -29,17 +29,17 @@ export async function analyzeIntent(
     .map(a => `- id: "${a.id}", name: "${a.name}", emoji: "${a.emoji}", role: "${a.role}", description: "${a.description}"`)
     .join('\n');
 
-  const systemPrompt = `你是一個意圖分析器。根據使用者的訊息和對話歷史，從可用的 AI 好友中選出 2-3 位最相關的來回應。
+  const systemPrompt = `你是一個意圖分析器。根據使用者的訊息和對話歷史，從可用的 AI 夥伴中邀請 2-3 位最相關的來回應。
 
-可用的 AI 好友：
+可用的 AI 夥伴：
 ${agentList}
 
 規則：
-- 選出 2-3 位最相關的好友（不多於 3 位）
-- 為每位被選中的好友提供一句簡短理由（繁體中文）
-- 提供一句總結，例如「根據你的訊息，我請了小語和阿哲來聊聊」
+- 邀請 2-3 位最相關的夥伴（不多於 3 位）
+- 為每位被邀請的夥伴提供一句簡短理由（繁體中文）
+- 提供一句總結，例如「根據你的訊息，我邀請了樂樂和阿思來聊聊」
 - 全部使用繁體中文
-- 如果沒有明確匹配，預設選擇 xiaoyu 和 azhe
+- 如果沒有明確匹配，預設邀請 lele 和 asi
 
 回傳 JSON 格式：
 {
@@ -109,7 +109,7 @@ ${agentList}
         const agent = availableAgents.find(av => av.id === a.id);
         return agent?.name || a.id;
       }).join('和');
-      parsed.summary = `根據你的訊息，我請了${names}來聊聊`;
+      parsed.summary = `根據你的訊息，我邀請了${names}來聊聊`;
     }
 
     return parsed;
@@ -122,15 +122,15 @@ ${agentList}
 function getDefaultIntent(
   availableAgents: Array<{ id: string; name: string; emoji: string; role: string; description: string }>
 ): IntentResult {
-  const xiaoyu = availableAgents.find(a => a.id === 'xiaoyu');
-  const azhe = availableAgents.find(a => a.id === 'azhe');
+  const lele = availableAgents.find(a => a.id === 'lele');
+  const asi = availableAgents.find(a => a.id === 'asi');
 
   const agents: IntentAgent[] = [];
-  if (xiaoyu) agents.push({ id: 'xiaoyu', reason: '提供情緒支持和共感回應' });
-  if (azhe) agents.push({ id: 'azhe', reason: '提供理性分析和建議' });
+  if (lele) agents.push({ id: 'lele', reason: '帶著正向能量，從鼓勵的角度陪你聊聊' });
+  if (asi) agents.push({ id: 'asi', reason: '幫你看見更深層的感受和需求' });
 
   return {
     agents,
-    summary: '根據你的訊息，我請了小語和阿哲來聊聊',
+    summary: '根據你的訊息，我邀請了樂樂和阿思來聊聊',
   };
 }

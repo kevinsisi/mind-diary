@@ -33,26 +33,26 @@ function buildSelectionPrompt(maxAgents: number): string {
     .map(a => `- ${a.id}（${a.name}，${a.role}）：${a.description}`)
     .join('\n');
 
-  return `你是「心靈日記」的 AI 好友調度員。根據使用者的訊息或日記內容，從 ${Object.keys(AGENTS).length} 位好友中選出最適合的好友來回應。
+  return `你是「心靈日記」的 AI 夥伴召集人。根據使用者的訊息或日記內容，從 ${Object.keys(AGENTS).length} 位夥伴中邀請最適合的夥伴來回應。
 
-好友列表：
+夥伴列表：
 ${agentList}
 
 請以 JSON 格式回傳（只能回傳 JSON，不能有其他文字）：
 {
   "selected": [
-    { "id": "agent_id", "reason": "選擇這位好友的具體原因（1-2句話，說明訊息中哪些內容讓你選了她/他）" }
+    { "id": "agent_id", "reason": "邀請這位夥伴的具體原因（1-2句話，說明訊息中哪些內容讓你邀請了她/他）" }
   ],
-  "summary": "用2-3句話說明你的派遣推理：你分析了哪些好友的專長、這個問題的核心需求是什麼、最終選了誰以及他們能從哪個角度幫助使用者（要提到具體好友名字）"
+  "summary": "用2-3句話說明你的邀請推理：你分析了哪些夥伴的專長、這個問題的核心需求是什麼、最終邀請了誰以及他們能從哪個角度幫助使用者（要提到具體夥伴名字）"
 }
 
 規則：
 - 通常選 2-3 位，最多選 ${maxAgents} 位，至少選 2 位
-- 根據訊息的主要主題、情境、需求來選擇最相關的好友
-- reason 要說明訊息中哪些內容讓你選了這位好友
-- summary 是派遣推理摘要，要讓使用者理解為什麼這些好友最適合，繁體中文
-- 不同面向的問題（如感情 + 地點建議）要選能互補的好友
-- 即使問題簡短，也要從不同角度挑選 2-3 位好友回應`;
+- 根據訊息的主要主題、情境、需求來選擇最相關的夥伴
+- reason 要說明訊息中哪些內容讓你邀請了這位夥伴
+- summary 是邀請推理摘要，要讓使用者理解為什麼這些夥伴最適合，繁體中文
+- 不同面向的問題（如焦慮 + 倦怠）要選能互補的夥伴
+- 即使問題簡短，也要從不同角度挑選 2-3 位夥伴回應`;
 }
 
 // Use Gemini AI to select the most appropriate agents
@@ -105,16 +105,16 @@ export async function selectAgentsWithAI(
       summary: parsed.summary || `我請了${selections.map(s => s.agent.name).join('和')}來為你回應`,
     };
   } catch (err) {
-    // Error fallback: pick xiaoyu + azhe as universal defaults
+    // Error fallback: pick lele + asi as universal defaults
     console.error('[selectAgentsWithAI] FALLBACK triggered — reason:', (err as Error).message);
-    const xiaoyu = AGENTS['xiaoyu'];
-    const azhe = AGENTS['azhe'];
+    const lele = AGENTS['lele'];
+    const asi = AGENTS['asi'];
     return {
       selections: [
-        { agent: xiaoyu, reason: '作為你的心靈夥伴，從情感角度陪你聊聊' },
-        { agent: azhe, reason: '提供務實的建議和不同視角' },
+        { agent: lele, reason: '帶著正向能量，從鼓勵的角度陪你聊聊' },
+        { agent: asi, reason: '幫你看見更深層的感受和需求' },
       ],
-      summary: `我請了${xiaoyu.name}和${azhe.name}來幫你，分別從心靈支持和務實建議兩個角度回應你的問題`,
+      summary: `我邀請了${lele.name}和${asi.name}來幫你，分別從正向鼓勵和自我覺察兩個角度回應你的問題`,
     };
   }
 }
@@ -274,7 +274,7 @@ export async function analyzeDiary(
   onEvent({
     type: 'phase',
     phase: 'thinking',
-    message: `派出 ${selectedAgents.length} 位好友分析`,
+    message: `邀請 ${selectedAgents.length} 位夥伴分析`,
     agents: selectedAgents.map(a => ({ id: a.id, name: a.name, emoji: a.emoji, role: a.role })),
   });
 
