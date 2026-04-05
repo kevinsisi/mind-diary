@@ -1142,9 +1142,9 @@ export default function Chat() {
       abortControllerRef.current = null;
       // If SSE ended without a complete event (connection drop / abort), reload from DB
       // Backend continues processing and saves the result even after client disconnects
-      if (!gotComplete && activeSessionId) {
+      if (!gotComplete && sessionId) {
         try {
-          await loadMessages(activeSessionId);
+          await loadMessages(sessionId);
         } catch {
           // ignore reload errors
         }
