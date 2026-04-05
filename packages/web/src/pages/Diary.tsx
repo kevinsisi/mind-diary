@@ -604,12 +604,14 @@ export default function Diary() {
             } else if (event.type === 'complete') {
               gotComplete = true;
               setSelectedEntry(prev => {
-                const base = prev || target;
+                // Only update if still viewing the same entry — prevents cross-talk
+                // when user navigates to a different entry while analysis is running
+                if (!prev || prev.id !== target.id) return prev;
                 return {
-                  ...base,
+                  ...prev,
                   ai_reflection: event.reflection || null,
                   ai_agents: event.agentResults || null,
-                  tags: event.tags || base.tags,
+                  tags: event.tags || prev.tags,
                 };
               });
               setEntries(prev => prev.map(e => e.id === target.id ? {
