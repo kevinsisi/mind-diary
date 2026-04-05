@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   getAvailableKey,
   getAvailableKeyExcluding,
@@ -146,6 +147,63 @@ export async function withGeminiRetry<T>(
   }
 
   throw lastError;
+}
+
+// ── Shared text call wrapper (used by both chat and diary) ────────────
+// Wraps withGeminiRetry with a 15-second timeout, optional thinking disable,
+// and automatic usage tracking. Single source of truth for non-streaming calls.
+
+export interface CallGeminiTextOptions {
+  maxRetries?: number;
+  callType?: string;
+  disableThinking?: boolean;
+  timeoutMs?: number;
+}
+
+export async function callGeminiText(
+  systemPrompt: string,
+  prompt: string,
+  maxOutputTokens: number,
+  options: CallGeminiTextOptions = {}
+): Promise<string> {
+  const {
+    maxRetries = 3,
+    callType = "gemini",
+    disableThinking = false,
+    timeoutMs = 15000,
+  } = options;
+  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+  return withGeminiRetry(async (apiKey) => {
+    const genai = new GoogleGenerativeAI(apiKey);
+    const generationConfig: Record<string, any> = { maxOutputTokens };
+    if (disableThinking) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+    const model = genai.getGenerativeModel({
+      model: modelName,
+      systemInstruction: systemPrompt,
+      generationConfig,
+    });
+
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), timeoutMs)
+    );
+    const response = await Promise.race([model.generateContent(prompt), timeout]);
+    const text = response.response.text();
+
+    const usage = response.response.usageMetadata;
+    if (usage) {
+      trackUsageByKey(
+        apiKey,
+        modelName,
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0,
+        callType
+      );
+    }
+    return text;
+  }, { maxRetries });
 }
 
 // ── Stream retry (same logic, void return) ────────────────────────────

@@ -4,12 +4,10 @@ import path from "node:path";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { AGENTS, AgentPersona } from "../ai/agents.js";
-import { trackUsageByKey } from "../ai/keyPool.js";
-import { withGeminiRetry } from "../ai/geminiRetry.js";
+import { callGeminiText } from "../ai/geminiRetry.js";
 import { analyzeImage } from "../ai/geminiClient.js";
 import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
 import { IMAGES_DIR } from "./diaryImages.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // ── Multer for chat image uploads (disk storage, served as static) ───
 const CHAT_IMAGES_DIR = path.join(IMAGES_DIR, "chat");
@@ -53,49 +51,8 @@ function sseWrite(res: Response, event: Record<string, any>): void {
 }
 
 
-// ── Gemini call with key rotation + 15s timeout ─────────────────────
-// Uses withGeminiRetry for proper cooldown tracking (same as diaryAnalyzer)
-
-async function callGeminiWithRetry(
-  systemPrompt: string,
-  prompt: string,
-  maxTokens: number,
-  maxRetries: number = 3,
-  callType: string = "chat",
-  disableThinking: boolean = false,
-): Promise<string> {
-  const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-
-  return withGeminiRetry(async (apiKey) => {
-    const genai = new GoogleGenerativeAI(apiKey);
-    const generationConfig: Record<string, any> = { maxOutputTokens: maxTokens };
-    // thinkingBudget:0 disables the thinking step so output is never truncated by thinking tokens.
-    // Required for short-output tasks (title generation) with gemini-2.5-flash thinking model.
-    if (disableThinking) {
-      generationConfig.thinkingConfig = { thinkingBudget: 0 };
-    }
-    const model = genai.getGenerativeModel({
-      model: modelName,
-      systemInstruction: systemPrompt,
-      generationConfig,
-    });
-
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("timeout")), 15000)
-    );
-    const response = await Promise.race([
-      model.generateContent(prompt),
-      timeout,
-    ]);
-    const text = response.response.text();
-
-    const usage = response.response.usageMetadata;
-    if (usage) {
-      trackUsageByKey(apiKey, modelName, usage.promptTokenCount || 0, usage.candidatesTokenCount || 0, callType);
-    }
-    return text;
-  }, { maxRetries });
-}
+// callGeminiText is imported from geminiRetry.ts — single shared implementation
+// for all non-streaming Gemini calls across chat and diary modules.
 
 // ── Run a single agent in chat mode ──────────────────────────────────
 
@@ -135,7 +92,7 @@ ${agent.systemPrompt}
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
-  let fullText = await callGeminiWithRetry(chatSystemPrompt, prompt, 1000, 5, "chat-agent");
+  let fullText = await callGeminiText(chatSystemPrompt, prompt, 1000, { maxRetries: 5, callType: "chat-agent" });
 
   // Send the full result as a single "thinking" event
   if (fullText) {
@@ -209,7 +166,7 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
-  const fullText = await callGeminiWithRetry(MASTER_CHAT_PROMPT, prompt, 4096, 5, "chat-master");
+  const fullText = await callGeminiText(MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master" });
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
@@ -604,13 +561,11 @@ router.post(
         try {
           const titleContext = `使用者：${content.slice(0, 300)}\n\nAI 回覆：${aiResponse.slice(0, 500)}`;
           console.log('[chat-title] Generating title for session', sessionId);
-          const aiTitle = await callGeminiWithRetry(
+          const aiTitle = await callGeminiText(
             '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
             titleContext,
             2048,
-            2,
-            'chat-title',
-            true, // disableThinking: faster + avoids token truncation on short output
+            { maxRetries: 2, callType: 'chat-title', disableThinking: true },
           );
           const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
           console.log('[chat-title] Generated:', JSON.stringify(cleanTitle), '| raw length:', aiTitle.length);
