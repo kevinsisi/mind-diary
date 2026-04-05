@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { sqlite } from "../db/connection.js";
-import { requireAdmin, signToken } from "../middleware/auth.js";
+import { requireAdmin, requireAuth, signToken } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -29,7 +29,7 @@ router.post("/login", (req: Request, res: Response) => {
     maxAge: 7 * 24 * 60 * 60 * 1000,
     secure: process.env.NODE_ENV === "production",
   });
-  res.json({ id: user.id, username: user.username, role: user.role });
+  res.json({ id: user.id, username: user.username, role: user.role, nickname: user.nickname ?? "" });
 });
 
 // POST /api/auth/logout
@@ -45,13 +45,32 @@ router.get("/me", (req: Request, res: Response) => {
     return;
   }
   const user = sqlite
-    .prepare("SELECT id, username, role, created_at FROM users WHERE id = ?")
+    .prepare("SELECT id, username, role, nickname, created_at FROM users WHERE id = ?")
     .get(req.userId) as any;
   if (!user) {
     res.status(401).json({ error: "使用者不存在" });
     return;
   }
   res.json(user);
+});
+
+// PATCH /api/auth/me — update own nickname (any logged-in user)
+router.patch("/me", (req: Request, res: Response) => {
+  if (!req.userId || req.userId === 0) {
+    res.status(401).json({ error: "未登入" });
+    return;
+  }
+  const { nickname } = req.body as { nickname?: string };
+  if (typeof nickname !== "string") {
+    res.status(400).json({ error: "nickname 必須是字串" });
+    return;
+  }
+  const trimmed = nickname.trim().slice(0, 30);
+  sqlite.prepare("UPDATE users SET nickname = ? WHERE id = ?").run(trimmed, req.userId);
+  const updated = sqlite
+    .prepare("SELECT id, username, role, nickname, created_at FROM users WHERE id = ?")
+    .get(req.userId) as any;
+  res.json(updated);
 });
 
 // ── Admin: user CRUD ───────────────────────────────────────────────

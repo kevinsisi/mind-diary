@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Key, Plus, Trash2, Upload, Shield, ShieldOff, BarChart3, RefreshCw, Globe } from 'lucide-react';
+import { Key, Plus, Trash2, Upload, ShieldOff, BarChart3, RefreshCw, Globe, User } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
+import { useAuth } from '../context/AuthContext';
 
 interface ApiKey {
   id: number;
@@ -30,6 +31,9 @@ interface UsageStats {
 
 export default function SettingsPage() {
   const { siteTitle, updateSiteTitle } = useSiteConfig();
+  const { user, updateNickname } = useAuth();
+  const isAdmin = user?.role === 'admin';
+
   const [titleInput, setTitleInput] = useState(siteTitle);
   const [titleSaving, setTitleSaving] = useState(false);
   const [keys, setKeys] = useState<ApiKey[]>([]);
@@ -41,6 +45,11 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [adding, setAdding] = useState(false);
+  const [nicknameInput, setNicknameInput] = useState(user?.nickname || '');
+  const [nicknameSaving, setNicknameSaving] = useState(false);
+
+  // Sync nickname input when user loads
+  useEffect(() => { setNicknameInput(user?.nickname || ''); }, [user?.nickname]);
 
   // Sync input when context loads the persisted title
   useEffect(() => { setTitleInput(siteTitle); }, [siteTitle]);
@@ -65,11 +74,26 @@ export default function SettingsPage() {
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([loadKeys(), loadUsage()]);
+    if (isAdmin) {
+      await Promise.all([loadKeys(), loadUsage()]);
+    }
     setLoading(false);
-  }, [loadKeys, loadUsage]);
+  }, [loadKeys, loadUsage, isAdmin]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  const handleSaveNickname = async () => {
+    setNicknameSaving(true);
+    clearMessages();
+    try {
+      await updateNickname(nicknameInput.trim());
+      setSuccess('暱稱已更新');
+    } catch {
+      setError('儲存暱稱失敗');
+    } finally {
+      setNicknameSaving(false);
+    }
+  };
 
   const handleSaveTitle = async () => {
     const trimmed = titleInput.trim();
@@ -155,15 +179,17 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">設定</h2>
-          <p className="mt-1 text-gray-500">管理 Gemini API 金鑰與用量統計</p>
+          <p className="mt-1 text-gray-500">{isAdmin ? '管理 Gemini API 金鑰與用量統計' : '個人設定'}</p>
         </div>
-        <button
-          onClick={loadAll}
-          className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
-        >
-          <RefreshCw className="w-4 h-4" />
-          重新整理
-        </button>
+        {isAdmin && (
+          <button
+            onClick={loadAll}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            <RefreshCw className="w-4 h-4" />
+            重新整理
+          </button>
+        )}
       </div>
 
       {/* Messages */}
@@ -180,8 +206,35 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Nickname */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <User className="w-5 h-5" />
+          暱稱
+        </h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={nicknameInput}
+            onChange={(e) => setNicknameInput(e.target.value)}
+            placeholder="輸入你的暱稱（最多 30 字）"
+            maxLength={30}
+            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            onKeyDown={(e) => e.key === 'Enter' && handleSaveNickname()}
+          />
+          <button
+            onClick={handleSaveNickname}
+            disabled={nicknameSaving || nicknameInput.trim() === (user?.nickname || '')}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {nicknameSaving ? '儲存中…' : '儲存'}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">設定後，AI 好友們會用你的暱稱稱呼你</p>
+      </div>
+
       {/* Usage Stats */}
-      {usage && (
+      {isAdmin && usage && (
         <div className="mb-6 grid grid-cols-3 gap-4">
           {[
             { label: '今日', data: usage.today },
@@ -199,6 +252,9 @@ export default function SettingsPage() {
           ))}
         </div>
       )}
+
+      {/* Admin-only sections */}
+      {isAdmin && <>
 
       {/* Site Title */}
       <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
@@ -353,6 +409,8 @@ export default function SettingsPage() {
           <li>金鑰遇到錯誤會自動冷卻（429→2分鐘、401/403→30分鐘）</li>
         </ul>
       </div>
+
+      </>}
     </div>
   );
 }

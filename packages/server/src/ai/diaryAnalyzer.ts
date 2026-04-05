@@ -119,6 +119,10 @@ export async function selectAgentsWithAI(
   }
 }
 
+function buildNicknameInstruction(nickname: string): string {
+  return nickname ? `使用者的暱稱是「${nickname}」，請在回應中用暱稱稱呼使用者。\n\n` : '';
+}
+
 // Run a single agent analysis
 async function runAgent(
   agent: AgentPersona,
@@ -126,7 +130,8 @@ async function runAgent(
   content: string,
   _apiKey: string, // ignored — withStreamRetry handles key
   onEvent: OnEvent,
-  imageContext?: string
+  imageContext?: string,
+  nickname?: string,
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
     type: 'agent-start',
@@ -148,7 +153,7 @@ async function runAgent(
     const genai = new GoogleGenerativeAI(apiKey);
     const geminiModel = genai.getGenerativeModel({
       model: modelName,
-      systemInstruction: agent.systemPrompt,
+      systemInstruction: buildNicknameInstruction(nickname || '') + agent.systemPrompt,
       generationConfig: { maxOutputTokens: 2048 },
     });
 
@@ -192,7 +197,8 @@ async function synthesize(
   agentResults: Array<{ agentId: string; result: string }>,
   title: string,
   content: string,
-  onEvent: OnEvent
+  onEvent: OnEvent,
+  nickname?: string,
 ): Promise<string> {
   onEvent({ type: 'synthesizing', message: '🧠 整合者正在彙整所有觀點...' });
 
@@ -205,7 +211,7 @@ async function synthesize(
     const genai = new GoogleGenerativeAI(apiKey);
     const model = genai.getGenerativeModel({
       model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      systemInstruction: MASTER_AGENT_PROMPT,
+      systemInstruction: buildNicknameInstruction(nickname || '') + MASTER_AGENT_PROMPT,
       generationConfig: { maxOutputTokens: 8192 },
     });
 
@@ -254,7 +260,8 @@ export async function analyzeDiary(
   title: string,
   content: string,
   onEvent: OnEvent,
-  imageContext?: string
+  imageContext?: string,
+  nickname?: string,
 ): Promise<{ reflection: string; tags: string[]; agentResults: Array<{ agentId: string; name: string; emoji: string; role: string; result: string }> }> {
   // Phase 1: AI-based agent selection
   onEvent({ type: 'phase', phase: 'analyzing', message: 'AI 分析日記內容，選擇最適合的好友...' });
@@ -282,7 +289,7 @@ export async function analyzeDiary(
   const keys = assignBatchKeys(selectedAgents.length);
   const agentPromises = selectedAgents.map((agent, i) => {
     const key = keys[i % keys.length];
-    return runAgent(agent, title, content, key, onEvent, imageContext).catch(err => {
+    return runAgent(agent, title, content, key, onEvent, imageContext, nickname).catch(err => {
       onEvent({ type: 'error', agentId: agent.id, message: `${agent.name} 分析失敗: ${err.message}` });
       return { agentId: agent.id, result: '（分析暫時無法完成）' };
     });
@@ -292,7 +299,7 @@ export async function analyzeDiary(
 
   // Phase 3: Synthesize
   onEvent({ type: 'phase', phase: 'synthesizing', message: '整合分析結果...' });
-  const reflection = await synthesize(agentResults, title, content, onEvent);
+  const reflection = await synthesize(agentResults, title, content, onEvent, nickname);
 
   // Phase 4: Auto-tags (parallel with synthesis done)
   onEvent({ type: 'phase', phase: 'tagging', message: '生成標籤...' });

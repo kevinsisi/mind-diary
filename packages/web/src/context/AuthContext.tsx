@@ -5,6 +5,7 @@ interface AuthUser {
   id: number;
   username: string;
   role: 'admin' | 'user';
+  nickname: string;
 }
 
 interface AuthContextValue {
@@ -12,6 +13,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateNickname: (nickname: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -38,7 +40,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
-  return <AuthContext.Provider value={{ user, isLoading, login, logout }}>{children}</AuthContext.Provider>;
+  async function updateNickname(nickname: string) {
+    const updated = await apiClient.patch<AuthUser>('/api/auth/me', { nickname });
+    setUser(updated);
+  }
+
+  return <AuthContext.Provider value={{ user, isLoading, login, logout, updateNickname }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth(): AuthContextValue {

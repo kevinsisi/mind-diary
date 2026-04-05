@@ -314,13 +314,18 @@ router.post("/:id/analyze", async (req: Request, res: Response) => {
   try {
     const { analyzeDiary } = await import('../ai/diaryAnalyzer.js');
 
+    const userData = sqlite.prepare("SELECT nickname FROM users WHERE id = ?").get(req.userId) as { nickname: string } | undefined;
+    const nickname = userData?.nickname || '';
+
     const result = await analyzeDiary(
       entry.title,
       entry.content,
       (event) => {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
         flush();
-      }
+      },
+      undefined,
+      nickname,
     );
 
     // Save reflection to DB

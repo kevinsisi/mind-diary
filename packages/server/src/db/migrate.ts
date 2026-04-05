@@ -201,5 +201,11 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE chat_messages ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Add nickname column to users if it doesn't exist
+  const userCols = db.prepare("PRAGMA table_info(users)").all() as any[];
+  if (!userCols.some((c: any) => c.name === "nickname")) {
+    db.exec("ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''");
+  }
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

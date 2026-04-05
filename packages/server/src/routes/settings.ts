@@ -7,11 +7,12 @@ import {
   getUsageStats,
 } from "../ai/keyPool.js";
 import { sqlite } from "../db/connection.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
 // GET /api/settings/keys — list all keys with usage stats
-router.get("/keys", (_req: Request, res: Response) => {
+router.get("/keys", requireAdmin, (_req: Request, res: Response) => {
   try {
     const keys = getKeyList();
     res.json({ keys });
@@ -22,7 +23,7 @@ router.get("/keys", (_req: Request, res: Response) => {
 });
 
 // POST /api/settings/keys — add new key
-router.post("/keys", (req: Request, res: Response) => {
+router.post("/keys", requireAdmin, (req: Request, res: Response) => {
   try {
     const { key } = req.body;
 
@@ -51,7 +52,7 @@ router.post("/keys", (req: Request, res: Response) => {
 });
 
 // DELETE /api/settings/keys/:suffix — remove key
-router.delete("/keys/:suffix", (req: Request, res: Response) => {
+router.delete("/keys/:suffix", requireAdmin, (req: Request, res: Response) => {
   try {
     const suffix = req.params.suffix as string;
     const removed = removeApiKey(suffix);
@@ -68,7 +69,7 @@ router.delete("/keys/:suffix", (req: Request, res: Response) => {
 });
 
 // POST /api/settings/keys/batch — bulk import
-router.post("/keys/batch", (req: Request, res: Response) => {
+router.post("/keys/batch", requireAdmin, (req: Request, res: Response) => {
   try {
     const { keys } = req.body;
 
@@ -114,7 +115,7 @@ router.post("/keys/batch", (req: Request, res: Response) => {
 });
 
 // POST /api/settings/keys/validate — validate a single key
-router.post("/keys/validate", (req: Request, res: Response) => {
+router.post("/keys/validate", requireAdmin, (req: Request, res: Response) => {
   try {
     const { key } = req.body;
 
@@ -147,8 +148,8 @@ router.post("/keys/validate", (req: Request, res: Response) => {
   }
 });
 
-// GET /api/settings/usage — aggregated usage stats
-router.get("/usage", (_req: Request, res: Response) => {
+// GET /api/settings/usage — aggregated usage stats (admin only)
+router.get("/usage", requireAdmin, (_req: Request, res: Response) => {
   try {
     const stats = getUsageStats();
     res.json(stats);
@@ -171,8 +172,8 @@ router.get("/config", (_req: Request, res: Response) => {
   }
 });
 
-// PUT /api/settings/config — update site config
-router.put("/config", (req: Request, res: Response) => {
+// PUT /api/settings/config — update site config (admin only)
+router.put("/config", requireAdmin, (req: Request, res: Response) => {
   try {
     const { site_title } = req.body;
 

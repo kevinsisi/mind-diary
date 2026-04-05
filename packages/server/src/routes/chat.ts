@@ -56,6 +56,10 @@ function sseWrite(res: Response, event: Record<string, any>): void {
 
 // ── Run a single agent in chat mode ──────────────────────────────────
 
+function buildNicknameInstruction(nickname: string): string {
+  return nickname ? `使用者的暱稱是「${nickname}」，請在回應中用暱稱稱呼使用者。\n\n` : '';
+}
+
 async function runChatAgent(
   agent: AgentPersona,
   userMessage: string,
@@ -64,6 +68,7 @@ async function runChatAgent(
   _apiKey: string, // ignored — withStreamRetry handles key selection
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
+  nickname?: string,
 ): Promise<{ agentId: string; result: string }> {
   onEvent({
     type: "agent-start",
@@ -73,7 +78,7 @@ async function runChatAgent(
     agentRole: agent.role,
   });
 
-  const chatSystemPrompt = `你是「${agent.name}」（${agent.role}），正在和其他 AI 好友一起回應使用者的訊息。
+  const chatSystemPrompt = `${buildNicknameInstruction(nickname || '')}你是「${agent.name}」（${agent.role}），正在和其他 AI 好友一起回應使用者的訊息。
 
 ${agent.systemPrompt}
 
@@ -142,6 +147,7 @@ async function synthesizeChat(
   historyStr: string,
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
+  nickname?: string,
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
 
@@ -166,7 +172,7 @@ async function synthesizeChat(
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
-  const fullText = await callGeminiText(MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
+  const fullText = await callGeminiText(buildNicknameInstruction(nickname || '') + MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
@@ -516,6 +522,10 @@ router.post(
         })),
       });
 
+      // Look up user nickname for personalized AI responses
+      const chatUserData = sqlite.prepare("SELECT nickname FROM users WHERE id = ?").get(req.userId) as { nickname: string } | undefined;
+      const userNickname = chatUserData?.nickname || '';
+
       // 5. Run agents in parallel (callGeminiWithRetry handles keys internally)
       const agentPromises = selectedAgents.map((agent) => {
         return runChatAgent(
@@ -526,6 +536,7 @@ router.post(
           "",
           sendEvent,
           imagePart || undefined,
+          userNickname,
         ).catch((err) => {
           console.error(`[chat] Agent ${agent.id} failed:`, err);
           sendEvent({
@@ -556,6 +567,7 @@ router.post(
         historyStr,
         sendEvent,
         imagePart || undefined,
+        userNickname,
       );
 
       // 6.5 Generate AI title from full conversation context (first message only)
