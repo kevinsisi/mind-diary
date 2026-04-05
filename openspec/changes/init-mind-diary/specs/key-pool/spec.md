@@ -1,3 +1,14 @@
+## Migration Note
+
+> **已遷移至 @kevinsisi/ai-core**
+>
+> 本規格描述的 Key Pool 功能已透過 `@kevinsisi/ai-core` 套件實作。
+> - Adapter 位置：`packages/server/src/ai/mindDiaryAdapter.ts`（實作 `StorageAdapter` 介面）
+> - 套件來源：https://github.com/kevinsisi/ai-core
+> - 安裝：`npm install github:kevinsisi/ai-core`
+>
+> 下方需求反映規格設計意圖；實際實作細節請參閱 adapter 原始碼。
+
 ## ADDED Requirements
 
 ### Requirement: Key CRUD with DB and ENV sources
