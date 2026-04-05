@@ -5,7 +5,7 @@ import {
   removeApiKey,
   invalidateKeyCache,
   getUsageStats,
-} from "../ai/keyPool.js";
+} from "../ai/pool.js";
 import { sqlite } from "../db/connection.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
 

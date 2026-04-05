@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { withGeminiRetry } from "./geminiRetry.js";
-import { trackUsageByKey } from "./keyPool.js";
+import { trackUsageByKey } from "./pool.js";
 
 // ── Config ────────────────────────────────────────────────────────────
 const DEFAULT_MODEL = "gemini-2.5-flash";

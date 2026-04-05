@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
+    "@kevinsisi/ai-core": "github:kevinsisi/ai-core",
     "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/jsonwebtoken": "^9.0.10",

@@ -1,157 +1,25 @@
+/**
+ * geminiRetry.ts — powered by @kevinsisi/ai-core withRetry
+ *
+ * Keeps the same public API as the old implementation so callers don't change.
+ */
+
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { withRetry, NoAvailableKeyError } from "@kevinsisi/ai-core";
 import {
   getAvailableKey,
   getAvailableKeyExcluding,
   markKeyBad,
   assignBatchKeys,
   trackUsageByKey,
-} from "./keyPool.js";
+} from "./pool.js";
 
 // ── Types ─────────────────────────────────────────────────────────────
+
 export interface RetryOptions {
   maxRetries?: number;
   callType?: string;
 }
-
-// ── Error classification ──────────────────────────────────────────────
-
-interface ClassifiedError {
-  type: "rate_limit" | "auth" | "server" | "unknown";
-  message: string;
-}
-
-function classifyError(err: unknown): ClassifiedError {
-  const msg =
-    err instanceof Error ? err.message : String(err);
-  const combined = msg.toLowerCase();
-
-  // Also check for status codes in error objects
-  const status = (err as any)?.status ?? (err as any)?.httpStatusCode ?? 0;
-
-  // Check auth/suspended FIRST (403 errors contain URL with "generatecontent" which has "rate")
-  if (
-    status === 401 ||
-    status === 403 ||
-    combined.includes("api_key_invalid") ||
-    combined.includes("permission denied") ||
-    combined.includes("suspended") ||
-    combined.includes("consumer_suspended")
-  ) {
-    return { type: "auth", message: msg };
-  }
-
-  if (
-    status === 429 ||
-    combined.includes("429") ||
-    combined.includes("resource_exhausted") ||
-    combined.includes("rate_limit") ||
-    combined.includes("rate limit")
-  ) {
-    return { type: "rate_limit", message: msg };
-  }
-
-  if (
-    status >= 500 ||
-    combined.includes("500") ||
-    combined.includes("503") ||
-    combined.includes("internal") ||
-    combined.includes("unavailable")
-  ) {
-    return { type: "server", message: msg };
-  }
-
-  return { type: "unknown", message: msg };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// ── Main retry wrapper ────────────────────────────────────────────────
-
-export async function withGeminiRetry<T>(
-  fn: (apiKey: string) => Promise<T>,
-  options?: RetryOptions
-): Promise<T> {
-  const maxRetries = options?.maxRetries ?? 3;
-  let currentKey = getAvailableKey();
-
-  if (!currentKey) {
-    throw new Error("[geminiRetry] No API keys available");
-  }
-
-  let lastError: unknown;
-
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const result = await fn(currentKey);
-      return result;
-    } catch (err) {
-      lastError = err;
-      const classified = classifyError(err);
-
-      console.warn(
-        `[geminiRetry] Attempt ${attempt + 1}/${maxRetries + 1} failed: ${classified.type} — ${classified.message}`
-      );
-
-      if (attempt >= maxRetries) break;
-
-      switch (classified.type) {
-        case "rate_limit": {
-          markKeyBad(currentKey, "429 rate_limit");
-          const nextKey = getAvailableKeyExcluding(currentKey);
-          if (!nextKey) {
-            throw new Error(
-              "[geminiRetry] All keys exhausted after rate limit"
-            );
-          }
-          currentKey = nextKey;
-          break;
-        }
-
-        case "auth": {
-          const authReason = classified.message.toLowerCase().includes("suspended")
-            ? "403 suspended"
-            : "401/403 auth_failure";
-          markKeyBad(currentKey, authReason);
-          const nextKey = getAvailableKeyExcluding(currentKey);
-          if (!nextKey) {
-            throw new Error(
-              "[geminiRetry] All keys exhausted after auth failure"
-            );
-          }
-          currentKey = nextKey;
-          break;
-        }
-
-        case "server": {
-          markKeyBad(currentKey, "5xx server_error");
-          await sleep(1000);
-          // Retry same key after short wait (it got a short cooldown)
-          // but if it's still in cooldown, get another
-          const retryKey = getAvailableKey();
-          if (!retryKey) {
-            throw new Error(
-              "[geminiRetry] All keys exhausted after server error"
-            );
-          }
-          currentKey = retryKey;
-          break;
-        }
-
-        case "unknown":
-          // Don't retry unknown errors
-          throw err;
-      }
-    }
-  }
-
-  throw lastError;
-}
-
-// ── Shared text call wrapper (used by both chat and diary) ────────────
-// Wraps withGeminiRetry with a 15-second timeout, optional thinking disable,
-// and automatic usage tracking. Single source of truth for non-streaming calls.
 
 export interface CallGeminiTextOptions {
   maxRetries?: number;
@@ -159,6 +27,41 @@ export interface CallGeminiTextOptions {
   disableThinking?: boolean;
   timeoutMs?: number;
 }
+
+// ── Main retry wrapper ─────────────────────────────────────────────────
+
+export async function withGeminiRetry<T>(
+  fn: (apiKey: string) => Promise<T>,
+  options?: RetryOptions
+): Promise<T> {
+  const initialKey = await getAvailableKey();
+  if (!initialKey) {
+    throw new Error("[geminiRetry] No API keys available");
+  }
+
+  return withRetry(fn, initialKey, {
+    maxRetries: options?.maxRetries ?? 3,
+    rotateKey: async () => {
+      const nextKey = await getAvailableKeyExcluding(initialKey);
+      if (!nextKey) throw new NoAvailableKeyError();
+      return nextKey;
+    },
+    onRetry: async (info) => {
+      if (
+        info.errorClass === "quota" ||
+        info.errorClass === "rate-limit" ||
+        info.errorClass === "network"
+      ) {
+        await markKeyBad(initialKey, info.errorClass);
+      }
+      console.warn(
+        `[geminiRetry] Attempt ${info.attempt}/${info.maxRetries + 1} failed: ${info.errorClass}`
+      );
+    },
+  });
+}
+
+// ── Shared text call wrapper ───────────────────────────────────────────
 
 export async function callGeminiText(
   systemPrompt: string,
@@ -176,7 +79,7 @@ export async function callGeminiText(
 
   return withGeminiRetry(async (apiKey) => {
     const genai = new GoogleGenerativeAI(apiKey);
-    const generationConfig: Record<string, any> = { maxOutputTokens };
+    const generationConfig: Record<string, unknown> = { maxOutputTokens };
     if (disableThinking) {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
@@ -206,7 +109,7 @@ export async function callGeminiText(
   }, { maxRetries });
 }
 
-// ── Stream retry (same logic, void return) ────────────────────────────
+// ── Stream retry ───────────────────────────────────────────────────────
 
 export async function withStreamRetry(
   fn: (apiKey: string) => Promise<void>,
@@ -215,14 +118,23 @@ export async function withStreamRetry(
   return withGeminiRetry(fn, options);
 }
 
-// ── Batch caller ──────────────────────────────────────────────────────
+// ── Batch caller ───────────────────────────────────────────────────────
 
 export function createBatchCaller(count: number) {
-  const keys = assignBatchKeys(count);
+  let keys: string[] = [];
   let index = 0;
+  let initialized = false;
+
+  const ensureKeys = async () => {
+    if (!initialized) {
+      keys = await assignBatchKeys(count);
+      initialized = true;
+    }
+  };
 
   return {
-    getKey(): string {
+    async getKey(): Promise<string> {
+      await ensureKeys();
       if (index >= keys.length) {
         throw new Error("[batchCaller] No more keys in batch");
       }

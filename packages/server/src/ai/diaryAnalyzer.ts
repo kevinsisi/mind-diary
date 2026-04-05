@@ -1,6 +1,6 @@
 import { AGENTS, MASTER_AGENT_PROMPT, AgentPersona } from './agents.js';
 import { withGeminiRetry } from './geminiRetry.js';
-import { assignBatchKeys, trackUsageByKey } from './keyPool.js';
+import { assignBatchKeys, trackUsageByKey } from './pool.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface AnalysisEvent {
@@ -294,7 +294,7 @@ export async function analyzeDiary(
   });
 
   // Phase 2: Run agents in parallel with batch keys
-  const keys = assignBatchKeys(selectedAgents.length);
+  const keys = await assignBatchKeys(selectedAgents.length);
   const agentPromises = selectedAgents.map((agent, i) => {
     const key = keys[i % keys.length];
     return runAgent(agent, title, content, key, onEvent, imageContext, nickname, customInstructions).catch(err => {

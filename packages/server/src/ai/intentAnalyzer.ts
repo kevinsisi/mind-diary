@@ -1,5 +1,5 @@
 import { withGeminiRetry } from './geminiRetry.js';
-import { trackUsageByKey } from './keyPool.js';
+import { trackUsageByKey } from './pool.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export interface IntentAgent {
