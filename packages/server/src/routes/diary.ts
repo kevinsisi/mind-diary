@@ -2,12 +2,12 @@ import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { generateReflection, generateText } from "../ai/geminiClient.js";
-import { requireAuth } from "../middleware/auth.js";
+import { optionalAuth } from "../middleware/auth.js";
 
 const router = Router();
 
-// All diary routes require authentication (guests get 401)
-router.use(requireAuth);
+// Diary routes are accessible to guests (user_id=0 scopes their own entries)
+router.use(optionalAuth);
 
 // ── Helpers ───────────────────────────────────────────────────────────
 

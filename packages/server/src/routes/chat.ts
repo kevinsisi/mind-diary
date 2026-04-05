@@ -8,6 +8,7 @@ import { callGeminiText } from "../ai/geminiRetry.js";
 import { analyzeImage } from "../ai/geminiClient.js";
 import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
 import { IMAGES_DIR } from "./diaryImages.js";
+import { optionalAuth, requireAuth } from "../middleware/auth.js";
 
 // ── Multer for chat image uploads (disk storage, served as static) ───
 const CHAT_IMAGES_DIR = path.join(IMAGES_DIR, "chat");
@@ -34,6 +35,9 @@ const chatImageUpload = multer({
 });
 
 const router = Router();
+
+// All chat routes parse auth; user_id=0 for guests
+router.use(optionalAuth);
 
 // ── SSE helpers ──────────────────────────────────────────────────────
 
@@ -197,7 +201,7 @@ router.get("/folders", (_req: Request, res: Response) => {
 });
 
 // POST /api/chat/folders
-router.post("/folders", (req: Request, res: Response) => {
+router.post("/folders", requireAuth, (req: Request, res: Response) => {
   try {
     const { name, icon } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "名稱不能為空" });
@@ -210,7 +214,7 @@ router.post("/folders", (req: Request, res: Response) => {
 });
 
 // PUT /api/chat/folders/:id
-router.put("/folders/:id", (req: Request, res: Response) => {
+router.put("/folders/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const { name, icon } = req.body;
     const id = Number(req.params.id);
@@ -223,7 +227,7 @@ router.put("/folders/:id", (req: Request, res: Response) => {
 });
 
 // DELETE /api/chat/folders/:id
-router.delete("/folders/:id", (req: Request, res: Response) => {
+router.delete("/folders/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     sqlite.prepare("UPDATE chat_sessions SET folder_id = NULL WHERE folder_id = ?").run(id);
@@ -242,8 +246,8 @@ router.post("/sessions", (req: Request, res: Response) => {
     const title = req.body.title || "新對話";
     const folderId = req.body.folder_id || null;
     const result = sqlite
-      .prepare("INSERT INTO chat_sessions (title, folder_id) VALUES (?, ?)")
-      .run(title, folderId);
+      .prepare("INSERT INTO chat_sessions (title, folder_id, user_id) VALUES (?, ?, ?)")
+      .run(title, folderId, req.userId);
 
     const session = sqlite
       .prepare("SELECT * FROM chat_sessions WHERE id = ?")
@@ -261,8 +265,8 @@ router.put("/sessions/:id", (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { title, folder_id } = req.body;
-    sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title), folder_id = ? WHERE id = ?")
-      .run(title || null, folder_id !== undefined ? folder_id : null, id);
+    sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title), folder_id = ? WHERE id = ? AND user_id = ?")
+      .run(title || null, folder_id !== undefined ? folder_id : null, id, req.userId);
     const session = sqlite.prepare("SELECT * FROM chat_sessions WHERE id = ?").get(id);
     res.json(session);
   } catch (err: any) {
@@ -277,13 +281,14 @@ router.get("/sessions", (req: Request, res: Response) => {
     let query = `SELECT s.*,
           (SELECT content FROM chat_messages WHERE session_id = s.id ORDER BY created_at DESC LIMIT 1) as last_message,
           (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
-        FROM chat_sessions s`;
-    const params: any[] = [];
+        FROM chat_sessions s
+        WHERE s.user_id = ?`;
+    const params: any[] = [req.userId];
 
     if (folderId === 'null') {
-      query += " WHERE s.folder_id IS NULL";
+      query += " AND s.folder_id IS NULL";
     } else if (folderId) {
-      query += " WHERE s.folder_id = ?";
+      query += " AND s.folder_id = ?";
       params.push(Number(folderId));
     }
 
@@ -303,8 +308,8 @@ router.delete("/sessions/:id", (req: Request, res: Response) => {
     const id = Number(req.params.id);
 
     const session = sqlite
-      .prepare("SELECT id FROM chat_sessions WHERE id = ?")
-      .get(id);
+      .prepare("SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?")
+      .get(id, req.userId);
 
     if (!session) {
       return res.status(404).json({ error: "對話不存在" });
@@ -336,10 +341,10 @@ router.post(
       return res.status(400).json({ error: "訊息內容不能為空" });
     }
 
-    // Verify session exists
+    // Verify session exists and belongs to current user
     const session = sqlite
-      .prepare("SELECT * FROM chat_sessions WHERE id = ?")
-      .get(sessionId) as { id: number; title: string } | undefined;
+      .prepare("SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?")
+      .get(sessionId, req.userId) as { id: number; title: string } | undefined;
 
     if (!session) {
       return res.status(404).json({ error: "對話不存在" });
@@ -408,11 +413,11 @@ router.post(
             `SELECT f.filename, f.ai_summary, snippet(files_fts, 0, '**', '**', '...', 32) as snippet
             FROM files_fts
             JOIN files f ON f.id = files_fts.rowid
-            WHERE files_fts MATCH ?
+            WHERE files_fts MATCH ? AND f.user_id = ?
             ORDER BY rank
             LIMIT 3`
           )
-          .all(content) as any[];
+          .all(content, req.userId) as any[];
 
         for (const r of fileResults) {
           contextParts.push(
@@ -429,11 +434,11 @@ router.post(
             `SELECT d.title, snippet(diary_fts, 1, '**', '**', '...', 32) as snippet
             FROM diary_fts
             JOIN diary_entries d ON d.id = diary_fts.rowid
-            WHERE diary_fts MATCH ?
+            WHERE diary_fts MATCH ? AND d.user_id = ?
             ORDER BY rank
             LIMIT 3`
           )
-          .all(content) as any[];
+          .all(content, req.userId) as any[];
 
         for (const r of diaryResults) {
           contextParts.push(`[日記: ${r.title}] ${r.snippet}`);
@@ -688,8 +693,8 @@ router.get("/sessions/:id/messages", (req: Request, res: Response) => {
     const sessionId = Number(req.params.id);
 
     const session = sqlite
-      .prepare("SELECT id FROM chat_sessions WHERE id = ?")
-      .get(sessionId);
+      .prepare("SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?")
+      .get(sessionId, req.userId);
 
     if (!session) {
       return res.status(404).json({ error: "對話不存在" });

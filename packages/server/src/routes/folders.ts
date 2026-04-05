@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { sqlite } from "../db/connection.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -16,8 +17,8 @@ router.get("/", (_req: Request, res: Response) => {
   }
 });
 
-// POST /api/folders — create folder
-router.post("/", (req: Request, res: Response) => {
+// POST /api/folders — create folder (requires login)
+router.post("/", requireAuth, (req: Request, res: Response) => {
   try {
     const { name, parent_id, icon } = req.body;
 
@@ -40,8 +41,8 @@ router.post("/", (req: Request, res: Response) => {
   }
 });
 
-// PUT /api/folders/:id — update folder
-router.put("/:id", (req: Request, res: Response) => {
+// PUT /api/folders/:id — update folder (requires login)
+router.put("/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const existing = sqlite
@@ -74,8 +75,8 @@ router.put("/:id", (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/folders/:id — delete folder (move entries to null folder_id)
-router.delete("/:id", (req: Request, res: Response) => {
+// DELETE /api/folders/:id — delete folder (requires login)
+router.delete("/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
