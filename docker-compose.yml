@@ -6,6 +6,7 @@ services:
     ports:
       - "8823:8823"
     environment:
+      - TZ=Asia/Taipei
       - PORT=8823
       - DATABASE_PATH=/app/data/mind-diary.db
       - GEMINI_API_KEYS=${GEMINI_API_KEYS}
