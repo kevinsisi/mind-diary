@@ -1,0 +1,51 @@
+---
+type: project
+---
+
+# Mind Diary — Project Memory
+
+## Architecture Snapshot
+
+- **Monorepo:** npm workspaces — `packages/server` (Express+TS) · `packages/web` (React+Vite)
+- **Backend runtime:** Node 20 Alpine, port 8823
+- **Frontend build:** Vite 6, served as SPA by Express from `packages/web/dist/`
+- **Database:** SQLite via `better-sqlite3` + Drizzle ORM; FTS5 for full-text search
+- **AI:** Google Gemini (`gemini-2.5-flash`) via `@kevinsisi/ai-core` key pool
+
+## 13 Agents
+
+IDs (stable — stored in DB): `lele`, `youyou`, `nunu`, `yanyan`, `jingjing`, `ajiao`, `amu`, `axiu`, `afei`, `nianjiunai`, `awen`, `asi`, `dran`
+
+Master agent (整合者) synthesizes 2–3 selected agents per message.
+
+## Key Files
+
+| File | Purpose |
+|---|---|
+| `packages/server/src/ai/agents.ts` | Agent persona definitions |
+| `packages/server/src/ai/diaryAnalyzer.ts` | Agent selection + synthesis |
+| `packages/server/src/ai/geminiClient.ts` | Gemini API wrapper |
+| `packages/server/src/ai/pool.ts` | API key pool (rotation, cooldown) |
+| `packages/server/src/routes/chat.ts` | Chat endpoints + SSE streaming |
+| `packages/server/src/db/schema.ts` | Drizzle schema (all tables) |
+| `packages/web/src/pages/Chat.tsx` | Main chat UI with SSE rendering |
+
+## Deployment
+
+- **Image:** `kevin950805/mind-diary:latest` (DockerHub, `linux/arm64`)
+- **CI:** Push to `main` → build+push → Tailscale SSH → `docker compose up -d`
+- **Secrets:** `GEMINI_API_KEYS` (comma-separated), DockerHub creds, Tailscale OAuth
+
+## Hard Constraints
+
+- Do not upgrade existing package versions
+- Do not rename agent IDs (referenced in stored messages)
+- Do not change port 8823
+- Do not break SSE protocol (`data: <token>` / `data: [DONE]`)
+- Schema changes need Drizzle migration
+
+## Toolchain (added 2026-04-07)
+
+- **ESLint:** `eslint.config.mjs` — `typescript-eslint` strict + React rules + Prettier compat
+- **Prettier:** `.prettierrc` — single quotes, 100 cols, LF, trailing commas
+- **Scripts:** `npm run lint` · `npm run lint:fix` · `npm run format` · `npm run format:check`
