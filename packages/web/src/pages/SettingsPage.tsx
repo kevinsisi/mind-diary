@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Key, Plus, Trash2, Upload, ShieldOff, BarChart3, RefreshCw, Globe, User } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
@@ -29,6 +29,11 @@ interface UsageStats {
   last30d: UsagePeriod;
 }
 
+function isImeConfirming(e: React.KeyboardEvent<HTMLElement>) {
+  const nativeEvent = e.nativeEvent as KeyboardEvent;
+  return nativeEvent.isComposing || nativeEvent.keyCode === 229;
+}
+
 export default function SettingsPage() {
   const { siteTitle, updateSiteTitle } = useSiteConfig();
   const { user, updateNickname, updateCustomInstructions } = useAuth();
@@ -49,6 +54,7 @@ export default function SettingsPage() {
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [customInstructions, setCustomInstructions] = useState('');
   const [instructionsSaved, setInstructionsSaved] = useState(false);
+  const isComposingRef = useRef(false);
 
   // Sync nickname input when user loads
   useEffect(() => {
@@ -232,10 +238,18 @@ export default function SettingsPage() {
             type="text"
             value={nicknameInput}
             onChange={(e) => setNicknameInput(e.target.value)}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false;
+            }}
             placeholder="輸入你的暱稱（最多 30 字）"
             maxLength={30}
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveNickname()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isComposingRef.current && !isImeConfirming(e)) handleSaveNickname();
+            }}
           />
           <button
             onClick={handleSaveNickname}
@@ -307,9 +321,17 @@ export default function SettingsPage() {
             type="text"
             value={titleInput}
             onChange={(e) => setTitleInput(e.target.value)}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false;
+            }}
             placeholder="輸入網站標題"
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-            onKeyDown={(e) => e.key === 'Enter' && handleSaveTitle()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isComposingRef.current && !isImeConfirming(e)) handleSaveTitle();
+            }}
           />
           <button
             onClick={handleSaveTitle}
@@ -334,9 +356,17 @@ export default function SettingsPage() {
             type="password"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={() => {
+              isComposingRef.current = false;
+            }}
             placeholder="貼上 Gemini API 金鑰（AIza...）"
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
-            onKeyDown={(e) => e.key === 'Enter' && handleAddKey()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isComposingRef.current && !isImeConfirming(e)) handleAddKey();
+            }}
           />
           <button
             onClick={handleAddKey}

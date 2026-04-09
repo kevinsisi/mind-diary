@@ -188,6 +188,20 @@ async function synthesizeChat(
   return fullText;
 }
 
+function buildFallbackChatResponse(
+  agentResults: Array<{ agentId: string; result: string }>
+): string {
+  return agentResults
+    .map((result) => {
+      const agent = AGENTS[result.agentId];
+      const name = agent?.name || result.agentId;
+      const emoji = agent?.emoji || "🤖";
+      const text = result.result?.trim() || "（暫時無法回應）";
+      return `${emoji} ${name}：${text}`;
+    })
+    .join("\n\n");
+}
+
 // ── Chat Folders CRUD ────────────────────────────────────────────────
 
 // GET /api/chat/folders
@@ -574,15 +588,22 @@ router.post(
         message: "整合回覆中...",
       });
 
-      const aiResponse = await synthesizeChat(
-        agentResults,
-        content,
-        contextStr,
-        historyStr,
-        sendEvent,
-        imagePart || undefined,
-        userNickname,
-      );
+      let aiResponse: string;
+      try {
+        aiResponse = await synthesizeChat(
+          agentResults,
+          content,
+          contextStr,
+          historyStr,
+          sendEvent,
+          imagePart || undefined,
+          userNickname,
+        );
+      } catch (synthesisErr: any) {
+        console.error("[chat] Synthesis failed, using fallback:", synthesisErr);
+        aiResponse = buildFallbackChatResponse(agentResults);
+        sendEvent({ type: "synthesizing", content: aiResponse });
+      }
 
       // 6.5 Generate AI title from full conversation context (first message only)
       // IMPORTANT: must be awaited BEFORE complete event + res.end(), otherwise

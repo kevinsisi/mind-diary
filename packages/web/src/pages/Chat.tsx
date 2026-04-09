@@ -336,6 +336,11 @@ function AgentMessageCard({
   );
 }
 
+function isImeConfirming(e: React.KeyboardEvent<HTMLElement>) {
+  const nativeEvent = e.nativeEvent as KeyboardEvent;
+  return nativeEvent.isComposing || nativeEvent.keyCode === 229;
+}
+
 // ── AssistantMessage Component ────────────────────────────────────
 
 function AssistantMessage({
@@ -577,6 +582,7 @@ export default function Chat() {
   // Folder state
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set());
+  const isComposingRef = useRef(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [movingSessionId, setMovingSessionId] = useState<number | null>(null);
@@ -1158,6 +1164,7 @@ export default function Chat() {
   // ── Key handler for textarea ────────────────────────────────────
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposingRef.current || isImeConfirming(e)) return;
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -1505,6 +1512,12 @@ export default function Chat() {
                     ref={inputRef}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
+                    onCompositionStart={() => {
+                      isComposingRef.current = true;
+                    }}
+                    onCompositionEnd={() => {
+                      isComposingRef.current = false;
+                    }}
                     onKeyDown={handleKeyDown}
                     onPaste={handleInputPaste}
                     placeholder={chatImage ? '補充圖片說明（可選）...' : '輸入訊息或貼上圖片...'}
