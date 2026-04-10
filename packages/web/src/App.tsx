@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
 import {
   Home,
@@ -28,6 +28,7 @@ import SearchPage from './pages/SearchPage';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import { APP_VERSION, LAST_SEEN_VERSION_KEY, RELEASE_NOTES } from './version';
 
 const navItems = [
   { to: '/', label: '首頁', icon: Home },
@@ -109,7 +110,36 @@ function SidebarFooter() {
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showReleaseNotes, setShowReleaseNotes] = useState(false);
+  const [releaseNotes, setReleaseNotes] = useState<typeof RELEASE_NOTES>([]);
   const { siteTitle } = useSiteConfig();
+
+  const currentVersionIndex = useMemo(
+    () => RELEASE_NOTES.findIndex((note) => note.version === APP_VERSION),
+    []
+  );
+
+  useEffect(() => {
+    const lastSeenVersion = localStorage.getItem(LAST_SEEN_VERSION_KEY);
+    if (lastSeenVersion === APP_VERSION) return;
+
+    const lastSeenIndex = RELEASE_NOTES.findIndex((note) => note.version === lastSeenVersion);
+    const notesToShow = RELEASE_NOTES.filter((_, index) => {
+      if (currentVersionIndex === -1) return false;
+      if (lastSeenIndex === -1) return index <= currentVersionIndex;
+      return index <= currentVersionIndex && index < lastSeenIndex;
+    });
+
+    if (notesToShow.length > 0) {
+      setReleaseNotes(notesToShow);
+      setShowReleaseNotes(true);
+    }
+  }, [currentVersionIndex]);
+
+  const dismissReleaseNotes = () => {
+    localStorage.setItem(LAST_SEEN_VERSION_KEY, APP_VERSION);
+    setShowReleaseNotes(false);
+  };
 
   return (
     <Routes>
@@ -118,6 +148,51 @@ export default function App() {
         path="*"
         element={
           <div className="flex h-screen overflow-hidden bg-white dark:bg-gray-950">
+            {showReleaseNotes && (
+              <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
+                <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 shadow-2xl p-6">
+                  <div className="flex items-start justify-between gap-4 mb-4">
+                    <div>
+                      <p className="text-sm text-indigo-600 dark:text-indigo-400 font-medium">v{APP_VERSION}</p>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mt-1">在你不在的時候，我們加入了這些功能</h2>
+                    </div>
+                    <button
+                      onClick={dismissReleaseNotes}
+                      className="p-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      aria-label="關閉更新提示"
+                    >
+                      <X size={18} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
+                    {releaseNotes.map((note) => (
+                      <div key={note.version} className="rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-gray-100">v{note.version}</span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400">{note.title}</span>
+                        </div>
+                        <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-300">
+                          {note.highlights.map((highlight) => (
+                            <li key={highlight}>• {highlight}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-5 flex justify-end">
+                    <button
+                      onClick={dismissReleaseNotes}
+                      className="px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+                    >
+                      我知道了
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {sidebarOpen && (
               <div
                 className="fixed inset-0 z-20 bg-black/30 lg:hidden"
