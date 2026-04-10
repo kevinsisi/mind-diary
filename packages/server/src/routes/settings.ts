@@ -8,8 +8,40 @@ import {
 } from "../ai/pool.js";
 import { sqlite } from "../db/connection.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { deleteUserMemory, getUserMemories } from "../services/userMemory.js";
 
 const router = Router();
+
+// GET /api/settings/memories — current user's cross-session memories
+router.get("/memories", requireAuth, (req: Request, res: Response) => {
+  try {
+    const memories = getUserMemories(req.userId, 50);
+    res.json({ memories });
+  } catch (err: any) {
+    console.error("[settings] List memories error:", err);
+    res.status(500).json({ error: err.message || "查詢失敗" });
+  }
+});
+
+// DELETE /api/settings/memories/:id — delete one memory owned by current user
+router.delete("/memories/:id", requireAuth, (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: "無效的記憶 ID" });
+    }
+
+    const deleted = deleteUserMemory(req.userId, id);
+    if (!deleted) {
+      return res.status(404).json({ error: "記憶不存在" });
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("[settings] Delete memory error:", err);
+    res.status(500).json({ error: err.message || "刪除失敗" });
+  }
+});
 
 // GET /api/settings/keys — list all keys with usage stats
 router.get("/keys", requireAdmin, (_req: Request, res: Response) => {

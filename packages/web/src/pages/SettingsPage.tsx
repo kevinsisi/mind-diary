@@ -29,6 +29,14 @@ interface UsageStats {
   last30d: UsagePeriod;
 }
 
+interface UserMemory {
+  id: number;
+  kind: 'preference' | 'goal' | 'background' | 'relationship' | 'ongoing';
+  summary: string;
+  confidence: number;
+  updated_at: string;
+}
+
 function isImeConfirming(e: React.KeyboardEvent<HTMLElement>) {
   const nativeEvent = e.nativeEvent as KeyboardEvent;
   return nativeEvent.isComposing || nativeEvent.keyCode === 229;
@@ -54,6 +62,9 @@ export default function SettingsPage() {
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [customInstructions, setCustomInstructions] = useState('');
   const [instructionsSaved, setInstructionsSaved] = useState(false);
+  const [memories, setMemories] = useState<UserMemory[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(true);
+  const [deletingMemoryId, setDeletingMemoryId] = useState<number | null>(null);
   const isComposingRef = useRef(false);
 
   // Sync nickname input when user loads
@@ -83,13 +94,27 @@ export default function SettingsPage() {
     } catch { /* non-critical */ }
   }, []);
 
+  const loadMemories = useCallback(async () => {
+    try {
+      const data = await apiClient.get<{ memories: UserMemory[] }>('/api/settings/memories');
+      setMemories(data.memories || []);
+    } catch {
+      setError('無法載入記憶列表');
+    } finally {
+      setMemoriesLoading(false);
+    }
+  }, []);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
+    setMemoriesLoading(true);
+    const tasks: Promise<unknown>[] = [loadMemories()];
     if (isAdmin) {
-      await Promise.all([loadKeys(), loadUsage()]);
+      tasks.push(loadKeys(), loadUsage());
     }
+    await Promise.all(tasks);
     setLoading(false);
-  }, [loadKeys, loadUsage, isAdmin]);
+  }, [isAdmin, loadKeys, loadMemories, loadUsage]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -115,6 +140,20 @@ export default function SettingsPage() {
       // silent
     }
   }
+
+  const handleDeleteMemory = async (memory: UserMemory) => {
+    clearMessages();
+    setDeletingMemoryId(memory.id);
+    try {
+      await apiClient.delete(`/api/settings/memories/${memory.id}`);
+      setMemories((current) => current.filter((item) => item.id !== memory.id));
+      setSuccess('已刪除這則記憶');
+    } catch {
+      setError('刪除記憶失敗');
+    } finally {
+      setDeletingMemoryId(null);
+    }
+  };
 
   const handleSaveTitle = async () => {
     const trimmed = titleInput.trim();
@@ -193,6 +232,14 @@ export default function SettingsPage() {
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
     if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return String(n);
+  };
+
+  const memoryKindLabels: Record<UserMemory['kind'], string> = {
+    preference: '偏好',
+    goal: '目標',
+    background: '背景',
+    relationship: '關係',
+    ongoing: '持續狀態',
   };
 
   return (
@@ -285,6 +332,47 @@ export default function SettingsPage() {
             {instructionsSaved ? '已儲存 ✓' : '儲存'}
           </button>
         </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 mb-6">
+        <div className="flex items-center justify-between mb-3 gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">跨對話記憶</h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">AI 會記住對未來對話有幫助的偏好、背景或長期目標。你可以刪除不想保留的內容。</p>
+          </div>
+          <span className="text-sm text-gray-500 dark:text-gray-400">{memories.length} 則</span>
+        </div>
+
+        {memoriesLoading ? (
+          <div className="text-sm text-gray-400 dark:text-gray-500 py-4">載入中...</div>
+        ) : memories.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-gray-300 dark:border-gray-700 px-4 py-6 text-sm text-gray-500 dark:text-gray-400">
+            目前還沒有保存任何跨對話記憶。
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {memories.map((memory) => (
+              <div key={memory.id} className="rounded-lg border border-gray-200 dark:border-gray-700 px-4 py-3 flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300">{memoryKindLabels[memory.kind]}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">可信度 {memory.confidence}</span>
+                  </div>
+                  <p className="text-sm text-gray-900 dark:text-gray-100">{memory.summary}</p>
+                  <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">更新於 {new Date(memory.updated_at).toLocaleString('zh-TW')}</p>
+                </div>
+                <button
+                  onClick={() => handleDeleteMemory(memory)}
+                  disabled={deletingMemoryId === memory.id}
+                  className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="刪除此記憶"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Usage Stats */}

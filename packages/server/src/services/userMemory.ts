@@ -17,6 +17,8 @@ interface UserMemoryRow {
   updated_at: string;
 }
 
+export type { UserMemoryRow, MemoryKind };
+
 interface CandidateMemory {
   kind: string;
   summary: string;
@@ -101,6 +103,16 @@ export function getUserMemories(userId: number, limit = 8): UserMemoryRow[] {
        LIMIT ?`
     )
     .all(userId, limit) as UserMemoryRow[];
+}
+
+export function deleteUserMemory(userId: number, memoryId: number): boolean {
+  if (!userId || !Number.isInteger(memoryId) || memoryId <= 0) return false;
+
+  const result = sqlite
+    .prepare("DELETE FROM user_memories WHERE id = ? AND user_id = ?")
+    .run(memoryId, userId);
+
+  return result.changes > 0;
 }
 
 export function formatUserMemories(userId: number, limit = 8): string {
