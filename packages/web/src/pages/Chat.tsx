@@ -18,6 +18,8 @@ import {
   FolderInput,
   X,
   Image as ImageIcon,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────
@@ -92,6 +94,8 @@ interface TodoBlock {
   title: string | null;
   items: TodoItem[];
 }
+
+const TODO_STATE_STORAGE_KEY = 'mind-diary:chat-todo-state';
 
 // ── Agent Color Map ──────────────────────────────────────────────
 
@@ -343,7 +347,7 @@ function AgentMessageCard({
 
       {/* Response content */}
       <div className="px-3 pb-3 text-sm text-gray-800 dark:text-gray-200 leading-relaxed prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
-        <ChatMarkdown>{agent.text}</ChatMarkdown>
+        <ChatMarkdown messageId={-1}>{agent.text}</ChatMarkdown>
       </div>
     </div>
   );
@@ -390,46 +394,119 @@ function parseTodoBlocks(content: string): { blocks: TodoBlock[]; remainder: str
   };
 }
 
-function TodoBlockCard({ block }: { block: TodoBlock }) {
-  const completedCount = block.items.filter((item) => item.done).length;
-  const allDone = completedCount === block.items.length;
+function getTodoStorageKey(messageId: number, blockIndex: number) {
+  return `${messageId}:${blockIndex}`;
+}
+
+function loadStoredTodoState(messageId: number, blockIndex: number, fallbackItems: TodoItem[]): TodoItem[] {
+  try {
+    const raw = localStorage.getItem(TODO_STATE_STORAGE_KEY);
+    if (!raw) return fallbackItems;
+    const parsed = JSON.parse(raw) as Record<string, boolean[]>;
+    const stored = parsed[getTodoStorageKey(messageId, blockIndex)];
+    if (!Array.isArray(stored) || stored.length !== fallbackItems.length) return fallbackItems;
+    return fallbackItems.map((item, index) => ({ ...item, done: Boolean(stored[index]) }));
+  } catch {
+    return fallbackItems;
+  }
+}
+
+function storeTodoState(messageId: number, blockIndex: number, items: TodoItem[]) {
+  try {
+    const raw = localStorage.getItem(TODO_STATE_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Record<string, boolean[]>) : {};
+    parsed[getTodoStorageKey(messageId, blockIndex)] = items.map((item) => item.done);
+    localStorage.setItem(TODO_STATE_STORAGE_KEY, JSON.stringify(parsed));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function serializeTodoBlock(block: TodoBlock, items: TodoItem[]) {
+  const titleLine = block.title ? `## ${block.title}\n` : '';
+  const tasks = items.map((item) => `- [${item.done ? 'x' : ' '}] ${item.text}`).join('\n');
+  return `${titleLine}${tasks}`.trim();
+}
+
+function TodoBlockCard({ block, messageId, blockIndex }: { block: TodoBlock; messageId: number; blockIndex: number }) {
+  const [items, setItems] = useState<TodoItem[]>(() => loadStoredTodoState(messageId, blockIndex, block.items));
+  const [copied, setCopied] = useState(false);
+  const completedCount = items.filter((item) => item.done).length;
+  const allDone = completedCount === items.length;
   const [collapsed, setCollapsed] = useState(allDone);
 
   useEffect(() => {
     if (allDone) setCollapsed(true);
   }, [allDone]);
 
+  useEffect(() => {
+    setItems(loadStoredTodoState(messageId, blockIndex, block.items));
+  }, [block.items, blockIndex, messageId]);
+
+  useEffect(() => {
+    storeTodoState(messageId, blockIndex, items);
+  }, [blockIndex, items, messageId]);
+
+  const toggleItem = (itemIndex: number) => {
+    setItems((current) => current.map((item, index) => (index === itemIndex ? { ...item, done: !item.done } : item)));
+  };
+
+  const copyMarkdown = async () => {
+    try {
+      await navigator.clipboard.writeText(serializeTodoBlock(block, items));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
   return (
-    <div className="my-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setCollapsed((value) => !value)}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-      >
-        <div>
+    <div className={`my-3 rounded-2xl border overflow-hidden transition-colors ${allDone ? 'border-gray-200 dark:border-gray-700 bg-gray-50/80 dark:bg-gray-900/80' : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900'}`}>
+      <div className="flex items-center gap-3 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setCollapsed((value) => !value)}
+          className="flex-1 text-left"
+        >
           <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             {block.title || `待辦事項`}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            已完成 {completedCount} 個待辦事項（共 {block.items.length} 個）
+            已完成 {completedCount} 個待辦事項（共 {items.length} 個）
           </div>
-        </div>
-        {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
-      </button>
+        </button>
+        <button
+          type="button"
+          onClick={copyMarkdown}
+          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          title="複製待辦 markdown"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          {copied ? '已複製' : '複製'}
+        </button>
+        <button type="button" onClick={() => setCollapsed((value) => !value)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+          {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+        </button>
+      </div>
 
       {!collapsed && (
         <div className="px-4 pb-4 space-y-2">
-          {block.items.map((item, index) => (
-            <div key={`${item.text}-${index}`} className={`flex items-start gap-3 text-sm ${item.done ? 'text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+          {items.map((item, index) => (
+            <button
+              type="button"
+              key={`${item.text}-${index}`}
+              onClick={() => toggleItem(index)}
+              className={`w-full flex items-start gap-3 text-sm text-left rounded-lg px-2 py-1.5 transition-colors hover:bg-gray-100/80 dark:hover:bg-gray-800/80 ${item.done ? 'text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}
+            >
               <input
                 type="checkbox"
                 checked={item.done}
                 readOnly
-                disabled
-                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 disabled:opacity-100"
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 pointer-events-none"
               />
               <span className={item.done ? 'line-through' : ''}>{item.text}</span>
-            </div>
+            </button>
           ))}
         </div>
       )}
@@ -437,13 +514,13 @@ function TodoBlockCard({ block }: { block: TodoBlock }) {
   );
 }
 
-function ChatMarkdown({ children }: { children: string }) {
+function ChatMarkdown({ children, messageId }: { children: string; messageId: number }) {
   const { blocks, remainder } = parseTodoBlocks(children);
 
   return (
     <>
       {blocks.map((block, index) => (
-        <TodoBlockCard key={`${block.title || 'todo'}-${index}`} block={block} />
+        <TodoBlockCard key={`${messageId}-${block.title || 'todo'}-${index}`} block={block} messageId={messageId} blockIndex={index} />
       ))}
       {remainder && (
         <ReactMarkdown
@@ -569,7 +646,7 @@ function AssistantMessage({
     <div className="flex justify-start">
       <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-md">
         <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
-          <ChatMarkdown>{msg.content}</ChatMarkdown>
+          <ChatMarkdown messageId={msg.id}>{msg.content}</ChatMarkdown>
         </div>
         <div className="text-xs mt-1.5 text-gray-400 dark:text-gray-500">
           <span>{formatTime(msg.created_at)}</span>
