@@ -5,8 +5,22 @@ import { requireAdmin, requireAuth, signToken } from "../middleware/auth.js";
 
 const router = Router();
 
+function ensureUserProfileColumns(): void {
+  const userCols = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+
+  if (!userCols.some((col) => col.name === "nickname")) {
+    sqlite.exec("ALTER TABLE users ADD COLUMN nickname TEXT NOT NULL DEFAULT ''");
+  }
+
+  const refreshedCols = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
+  if (!refreshedCols.some((col) => col.name === "custom_instructions")) {
+    sqlite.exec("ALTER TABLE users ADD COLUMN custom_instructions TEXT NOT NULL DEFAULT ''");
+  }
+}
+
 // POST /api/auth/login
 router.post("/login", (req: Request, res: Response) => {
+  ensureUserProfileColumns();
   const { username, password } = req.body as { username?: string; password?: string };
   if (!username || !password) {
     res.status(400).json({ error: "請輸入帳號和密碼" });
@@ -40,6 +54,7 @@ router.post("/logout", (_req: Request, res: Response) => {
 
 // GET /api/auth/me
 router.get("/me", (req: Request, res: Response) => {
+  ensureUserProfileColumns();
   if (!req.userId || req.userId === 0) {
     res.status(401).json({ error: "未登入" });
     return;
@@ -56,6 +71,7 @@ router.get("/me", (req: Request, res: Response) => {
 
 // PATCH /api/auth/me — update own nickname (any logged-in user)
 router.patch("/me", (req: Request, res: Response) => {
+  ensureUserProfileColumns();
   if (!req.userId || req.userId === 0) {
     res.status(401).json({ error: "未登入" });
     return;
