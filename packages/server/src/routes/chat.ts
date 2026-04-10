@@ -211,6 +211,32 @@ function isPlanningIntent(userMessage: string): boolean {
   return /旅行|旅遊|行程|規劃|安排|韓國|日本|首爾|大阪|東京|出國|自由行|待辦|清單|計畫/i.test(userMessage);
 }
 
+function extractTravelDestination(userMessage: string): string {
+  const match = userMessage.match(/韓國|日本|首爾|釜山|濟州|大阪|東京|京都|福岡|沖繩|巴黎|倫敦|曼谷|新加坡/);
+  return match?.[0] || "這趟旅行";
+}
+
+function buildPlanningStarter(userMessage: string): string {
+  const destination = extractTravelDestination(userMessage);
+  return [
+    "",
+    "## 可直接開始的規劃",
+    `- [ ] 先確認 ${destination} 要玩幾天、什麼時候去`,
+    "- [ ] 先抓大概預算：機票 / 住宿 / 交通 / 吃喝 / 購物",
+    "- [ ] 先決定旅遊節奏：悠閒、普通、還是排滿",
+    "- [ ] 列出 3-5 個一定想去的點，先不要一次排滿",
+    "",
+    "```md",
+    `目的地：${destination}`,
+    "目前最缺：日期、天數、預算、想玩類型",
+    "我下一步可以幫你：",
+    "1. 先排一版輕鬆行程",
+    "2. 幫你列規劃待辦",
+    "3. 幫你整理還缺哪些資訊",
+    "```",
+  ].join("\n");
+}
+
 function getOwnedChatFolder(folderId: unknown, userId: number) {
   if (folderId === undefined) return undefined;
   if (folderId === null) return null;
@@ -694,6 +720,10 @@ router.post(
         console.error("[chat] Synthesis failed, using fallback:", synthesisErr);
         aiResponse = buildFallbackChatResponse(agentResults);
         sendEvent({ type: "synthesizing", content: aiResponse });
+      }
+
+      if (isPlanningIntent(content) && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
+        aiResponse = `${aiResponse.trim()}\n${buildPlanningStarter(content)}`;
       }
 
       // 6.5 Generate AI title from full conversation context (first message only)
