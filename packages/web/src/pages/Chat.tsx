@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiClient } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -332,9 +333,54 @@ function AgentMessageCard({
 
       {/* Response content */}
       <div className="px-3 pb-3 text-sm text-gray-800 dark:text-gray-200 leading-relaxed prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
-        <ReactMarkdown>{agent.text}</ReactMarkdown>
+        <ChatMarkdown>{agent.text}</ChatMarkdown>
       </div>
     </div>
+  );
+}
+
+function ChatMarkdown({ children }: { children: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        pre: ({ children }) => (
+          <pre className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-950 text-gray-100 px-4 py-3 text-xs leading-6">
+            {children}
+          </pre>
+        ),
+        code: ({ inline, children, ...props }: any) =>
+          inline ? (
+            <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[0.9em] text-pink-700 dark:text-pink-300" {...props}>
+              {children}
+            </code>
+          ) : (
+            <code {...props}>{children}</code>
+          ),
+        ul: ({ children, ...props }) => (
+          <ul className="my-2 space-y-2 pl-0 list-none" {...props}>
+            {children}
+          </ul>
+        ),
+        li: ({ children, ...props }) => (
+          <li className="flex items-start gap-2 leading-relaxed" {...props}>
+            {children}
+          </li>
+        ),
+        input: ({ checked, ...props }) => (
+          <input
+            type="checkbox"
+            checked={checked}
+            readOnly
+            disabled
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 disabled:opacity-100"
+            {...props}
+          />
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
   );
 }
 
@@ -416,7 +462,7 @@ function AssistantMessage({
     <div className="flex justify-start">
       <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-md">
         <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
-          <ReactMarkdown>{msg.content}</ReactMarkdown>
+          <ChatMarkdown>{msg.content}</ChatMarkdown>
         </div>
         <div className="text-xs mt-1.5 text-gray-400 dark:text-gray-500">
           <span>{formatTime(msg.created_at)}</span>
