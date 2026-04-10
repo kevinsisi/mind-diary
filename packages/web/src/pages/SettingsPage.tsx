@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Key, Plus, Trash2, Upload, ShieldOff, BarChart3, RefreshCw, Globe, User } from 'lucide-react';
+import { Key, Plus, Trash2, Upload, ShieldOff, BarChart3, RefreshCw, Globe, User, Wrench, ShieldAlert } from 'lucide-react';
 import { apiClient } from '../api/client';
 import { useSiteConfig } from '../context/SiteConfigContext';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +37,27 @@ interface UserMemory {
   updated_at: string;
 }
 
+interface IsolationConflict {
+  folderId: number;
+  folderName: string;
+  userIds: number[];
+  linkedCount: number;
+}
+
+interface IsolationReport {
+  chatFoldersWithoutOwner: number;
+  diaryFoldersWithoutOwner: number;
+  chatFoldersMultiOwner: IsolationConflict[];
+  diaryFoldersMultiOwner: IsolationConflict[];
+}
+
+interface IsolationRepairResult {
+  repairedChatFolders: number;
+  clonedChatFolders: number;
+  repairedDiaryFolders: number;
+  report: IsolationReport;
+}
+
 function isImeConfirming(e: React.KeyboardEvent<HTMLElement>) {
   const nativeEvent = e.nativeEvent as KeyboardEvent;
   return nativeEvent.isComposing || nativeEvent.keyCode === 229;
@@ -65,6 +86,9 @@ export default function SettingsPage() {
   const [memories, setMemories] = useState<UserMemory[]>([]);
   const [memoriesLoading, setMemoriesLoading] = useState(true);
   const [deletingMemoryId, setDeletingMemoryId] = useState<number | null>(null);
+  const [isolationReport, setIsolationReport] = useState<IsolationReport | null>(null);
+  const [isolationLoading, setIsolationLoading] = useState(false);
+  const [isolationRepairing, setIsolationRepairing] = useState(false);
   const isComposingRef = useRef(false);
 
   // Sync nickname input when user loads
@@ -105,16 +129,30 @@ export default function SettingsPage() {
     }
   }, []);
 
+  const loadIsolationReport = useCallback(async () => {
+    if (!isAdmin) return;
+
+    setIsolationLoading(true);
+    try {
+      const data = await apiClient.get<IsolationReport>('/api/settings/isolation-report');
+      setIsolationReport(data);
+    } catch {
+      setError('無法載入隔離檢查報告');
+    } finally {
+      setIsolationLoading(false);
+    }
+  }, [isAdmin]);
+
   const loadAll = useCallback(async () => {
     setLoading(true);
     setMemoriesLoading(true);
     const tasks: Promise<unknown>[] = [loadMemories()];
     if (isAdmin) {
-      tasks.push(loadKeys(), loadUsage());
+      tasks.push(loadKeys(), loadUsage(), loadIsolationReport());
     }
     await Promise.all(tasks);
     setLoading(false);
-  }, [isAdmin, loadKeys, loadMemories, loadUsage]);
+  }, [isAdmin, loadIsolationReport, loadKeys, loadMemories, loadUsage]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -152,6 +190,20 @@ export default function SettingsPage() {
       setError('刪除記憶失敗');
     } finally {
       setDeletingMemoryId(null);
+    }
+  };
+
+  const handleRepairIsolation = async () => {
+    clearMessages();
+    setIsolationRepairing(true);
+    try {
+      const data = await apiClient.post<IsolationRepairResult>('/api/settings/isolation-repair', {});
+      setIsolationReport(data.report);
+      setSuccess(`修復完成：聊天資料夾 ${data.repairedChatFolders} 筆、複製 ${data.clonedChatFolders} 筆、日記資料夾 ${data.repairedDiaryFolders} 筆`);
+    } catch {
+      setError('執行隔離修復失敗');
+    } finally {
+      setIsolationRepairing(false);
     }
   };
 
@@ -392,6 +444,88 @@ export default function SettingsPage() {
               <div className="text-sm text-gray-500 dark:text-gray-400">{formatTokens(data.tokens_in + data.tokens_out)} tokens</div>
             </div>
           ))}
+        </div>
+      )}
+
+      {isAdmin && (
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-5 mb-6">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5" />
+                資料隔離檢查
+              </h3>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                掃描 legacy `folders` / `chat_folders` 的 owner 缺失與多使用者共用情況。修復只會處理安全案例，模糊案例會保留在報告中。
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={loadIsolationReport}
+                disabled={isolationLoading || isolationRepairing}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
+              >
+                {isolationLoading ? '掃描中…' : '重新掃描'}
+              </button>
+              <button
+                onClick={handleRepairIsolation}
+                disabled={isolationRepairing || isolationLoading}
+                className="px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm flex items-center gap-2"
+              >
+                <Wrench className="w-4 h-4" />
+                {isolationRepairing ? '修復中…' : '安全修復'}
+              </button>
+            </div>
+          </div>
+
+          {isolationReport ? (
+            <>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">未分配聊天資料夾</div>
+                  <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{isolationReport.chatFoldersWithoutOwner}</div>
+                </div>
+                <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                  <div className="text-sm text-gray-500 dark:text-gray-400">未分配日記資料夾</div>
+                  <div className="mt-1 text-2xl font-bold text-gray-900 dark:text-gray-100">{isolationReport.diaryFoldersWithoutOwner}</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">聊天資料夾多 owner 衝突</div>
+                  {isolationReport.chatFoldersMultiOwner.length === 0 ? (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">沒有發現衝突。</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {isolationReport.chatFoldersMultiOwner.map((conflict) => (
+                        <div key={`chat-${conflict.folderId}`} className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50/60 dark:bg-amber-900/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+                          #{conflict.folderId} {conflict.folderName} · users: {conflict.userIds.join(', ')} · linked {conflict.linkedCount}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">日記資料夾多 owner 衝突</div>
+                  {isolationReport.diaryFoldersMultiOwner.length === 0 ? (
+                    <div className="text-sm text-gray-500 dark:text-gray-400">沒有發現衝突。</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {isolationReport.diaryFoldersMultiOwner.map((conflict) => (
+                        <div key={`diary-${conflict.folderId}`} className="rounded-lg border border-red-200 dark:border-red-900/40 bg-red-50/60 dark:bg-red-900/10 px-3 py-2 text-sm text-red-900 dark:text-red-200">
+                          #{conflict.folderId} {conflict.folderName} · users: {conflict.userIds.join(', ')} · linked {conflict.linkedCount}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-gray-500 dark:text-gray-400">尚未取得報告。</div>
+          )}
         </div>
       )}
 

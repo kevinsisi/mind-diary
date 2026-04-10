@@ -8,6 +8,7 @@ import {
 } from "../ai/pool.js";
 import { sqlite } from "../db/connection.js";
 import { requireAdmin, requireAuth } from "../middleware/auth.js";
+import { getLegacyIsolationReport, repairLegacyIsolation } from "../services/legacyIsolation.js";
 import { deleteUserMemory, getUserMemories } from "../services/userMemory.js";
 
 const router = Router();
@@ -40,6 +41,26 @@ router.delete("/memories/:id", requireAuth, (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("[settings] Delete memory error:", err);
     res.status(500).json({ error: err.message || "刪除失敗" });
+  }
+});
+
+// GET /api/settings/isolation-report — admin report for legacy multi-user leaks
+router.get("/isolation-report", requireAdmin, (_req: Request, res: Response) => {
+  try {
+    res.json(getLegacyIsolationReport());
+  } catch (err: any) {
+    console.error("[settings] Isolation report error:", err);
+    res.status(500).json({ error: err.message || "查詢失敗" });
+  }
+});
+
+// POST /api/settings/isolation-repair — admin safe repair for legacy ownership gaps
+router.post("/isolation-repair", requireAdmin, (_req: Request, res: Response) => {
+  try {
+    res.json(repairLegacyIsolation());
+  } catch (err: any) {
+    console.error("[settings] Isolation repair error:", err);
+    res.status(500).json({ error: err.message || "修復失敗" });
   }
 });
 

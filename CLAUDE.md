@@ -5,7 +5,7 @@
 AI 心靈日記 — a multi-agent emotional wellness journaling app powered by 13 AI personas backed by Google Gemini.
 
 - **Production:** `diary.sisihome.org:8823`
-- **Version:** 0.15.2
+- **Version:** 0.16.0
 - **Stack:** Express + TypeScript + SQLite (server) · React + Vite + Tailwind (web)
 - **Monorepo:** npm workspaces (`packages/server`, `packages/web`)
 
@@ -113,6 +113,7 @@ All routes require JWT cookie auth except `/api/auth/login`.
 | GET | `/api/search/?q=` | FTS5 full-text search |
 | GET/PUT | `/api/settings/` | User settings |
 | GET/DELETE | `/api/settings/memories` | List / remove own long-term memories |
+| GET/POST | `/api/settings/isolation-*` | Admin legacy isolation report / safe repair |
 
 ## Deployment
 
