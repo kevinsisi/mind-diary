@@ -44,6 +44,7 @@ interface Message {
   image_url?: string;
   ai_agents?: string;
   dispatch_reason?: string;
+  memory_updated?: boolean;
 }
 
 interface AgentThinkingState {
@@ -78,6 +79,7 @@ interface ChatSSEEvent {
   agents?: Array<{ id: string; name: string; emoji: string; role: string; reason?: string }>;
   reasons?: Record<string, string>;
   summary?: string;
+  memoryUpdated?: boolean;
 }
 
 // ── Agent Color Map ──────────────────────────────────────────────
@@ -396,8 +398,13 @@ function AssistantMessage({
           ))}
 
           {/* Timestamp */}
-          <div className="text-xs text-gray-400 dark:text-gray-500 px-1">
-            {formatTime(msg.created_at)}
+          <div className="text-xs text-gray-400 dark:text-gray-500 px-1 flex items-center gap-2 flex-wrap">
+            <span>{formatTime(msg.created_at)}</span>
+            {msg.memory_updated && (
+              <span className="text-[11px] text-gray-400/80 dark:text-gray-500/80">
+                記憶已更新
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -412,7 +419,8 @@ function AssistantMessage({
           <ReactMarkdown>{msg.content}</ReactMarkdown>
         </div>
         <div className="text-xs mt-1.5 text-gray-400 dark:text-gray-500">
-          {formatTime(msg.created_at)}
+          <span>{formatTime(msg.created_at)}</span>
+          {msg.memory_updated && <span className="ml-2 text-[11px] opacity-80">記憶已更新</span>}
         </div>
       </div>
     </div>
@@ -1070,6 +1078,7 @@ export default function Chat() {
                   created_at: msg.created_at,
                   ai_agents: msg.ai_agents,
                   dispatch_reason: msg.dispatch_reason,
+                  memory_updated: event.memoryUpdated,
                 };
 
                 // Replace temp user message with real one (has server image_url), then add assistant
@@ -1106,6 +1115,7 @@ export default function Chat() {
                   role: 'assistant',
                   content: typeof msg === 'string' ? msg : (event.content || ''),
                   created_at: new Date().toISOString(),
+                  memory_updated: event.memoryUpdated,
                 };
                 setMessages((prev) => [...prev, fallbackMsg]);
 

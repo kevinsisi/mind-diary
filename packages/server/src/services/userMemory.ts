@@ -158,8 +158,8 @@ async function extractCandidateMemories(input: ExtractAndStoreMemoryInput): Prom
   return sanitizeCandidateMemories(parseCandidateMemories(raw));
 }
 
-function storeUserMemories(input: ExtractAndStoreMemoryInput, memories: Array<{ kind: MemoryKind; summary: string; confidence: number }>): void {
-  if (input.userId === 0 || memories.length === 0) return;
+function storeUserMemories(input: ExtractAndStoreMemoryInput, memories: Array<{ kind: MemoryKind; summary: string; confidence: number }>): boolean {
+  if (input.userId === 0 || memories.length === 0) return false;
 
   const upsert = sqlite.prepare(`
     INSERT INTO user_memories (user_id, kind, summary, source_session_id, source_message_id, confidence)
@@ -172,9 +172,10 @@ function storeUserMemories(input: ExtractAndStoreMemoryInput, memories: Array<{ 
       updated_at = datetime('now')
   `);
 
+  let changed = false;
   const tx = sqlite.transaction(() => {
     for (const memory of memories) {
-      upsert.run(
+      const result = upsert.run(
         input.userId,
         memory.kind,
         memory.summary,
@@ -182,15 +183,17 @@ function storeUserMemories(input: ExtractAndStoreMemoryInput, memories: Array<{ 
         input.sourceMessageId,
         memory.confidence,
       );
+      if (result.changes > 0) changed = true;
     }
   });
 
   tx();
+  return changed;
 }
 
-export async function extractAndStoreUserMemories(input: ExtractAndStoreMemoryInput): Promise<void> {
-  if (!input.userId) return;
+export async function extractAndStoreUserMemories(input: ExtractAndStoreMemoryInput): Promise<boolean> {
+  if (!input.userId) return false;
 
   const memories = await extractCandidateMemories(input);
-  storeUserMemories(input, memories);
+  return storeUserMemories(input, memories);
 }

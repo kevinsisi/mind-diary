@@ -90,10 +90,12 @@ export async function selectAgentsWithAI(
     console.log('[selectAgentsWithAI] raw response length:', raw.length, '| starts with:', raw.slice(0, 80));
     const parsed = JSON.parse(raw.trim());
     const selections: AgentSelection[] = [];
+    const seenAgentIds = new Set<string>();
 
     for (const item of parsed.selected || []) {
       const agent = AGENTS[item.id];
-      if (agent) {
+      if (agent && !seenAgentIds.has(agent.id)) {
+        seenAgentIds.add(agent.id);
         selections.push({ agent, reason: item.reason || '' });
       }
     }

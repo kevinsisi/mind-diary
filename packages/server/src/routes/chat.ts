@@ -580,7 +580,9 @@ router.post(
         summary: selectionSummary,
       });
 
-      const selectedAgents = selections.map((s) => s.agent);
+      const selectedAgents = selections
+        .map((s) => s.agent)
+        .filter((agent, index, agents) => agents.findIndex((candidate) => candidate.id === agent.id) === index);
       const intentResult = {
         agents: selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
         summary: selectionSummary,
@@ -732,8 +734,9 @@ router.post(
         )
         .get(sessionId) as { id: number; role: string; content: string; image_url: string | null; created_at: string } | undefined;
 
+      let memoryUpdated = false;
       try {
-        await extractAndStoreUserMemories({
+        memoryUpdated = await extractAndStoreUserMemories({
           userId: req.userId || 0,
           sessionId,
           sourceMessageId: userMessage?.id ?? null,
@@ -760,6 +763,7 @@ router.post(
           dispatch_reason: assistantMessage.dispatch_reason,
           created_at: assistantMessage.created_at,
         },
+        memoryUpdated,
       });
     } catch (err: any) {
       console.error("[chat] SSE message error:", err);
