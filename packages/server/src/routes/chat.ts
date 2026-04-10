@@ -193,6 +193,12 @@ async function synthesizeChat(
   return fullText;
 }
 
+function createClientAbortError(): Error {
+  const error = new Error("client-aborted");
+  error.name = "ClientAbortError";
+  return error;
+}
+
 function getOwnedChatFolder(folderId: unknown, userId: number) {
   if (folderId === undefined) return undefined;
   if (folderId === null) return null;
@@ -436,9 +442,18 @@ router.post(
       clearInterval(heartbeat);
     });
 
+    const ensureClientConnected = () => {
+      if (aborted) {
+        throw createClientAbortError();
+      }
+    };
+
     const sendEvent = (event: Record<string, any>) => {
       if (!aborted) sseWrite(res, event);
     };
+
+    let userMessageId: number | null = null;
+    let assistantSaved = false;
 
     try {
       // 1. Save user message (with image_url if uploaded)
@@ -446,11 +461,14 @@ router.post(
         ? `/images/chat/${path.basename(req.file.path)}`
         : null;
 
-      sqlite
+      const userInsert = sqlite
         .prepare(
           "INSERT INTO chat_messages (session_id, role, content, image_url) VALUES (?, 'user', ?, ?)"
         )
         .run(sessionId, content, imageUrl);
+      userMessageId = Number(userInsert.lastInsertRowid);
+
+      ensureClientConnected();
 
       // Check if this is the first message — title will be generated after AI responds
       const msgCount = (
@@ -512,6 +530,7 @@ router.post(
       if (req.file) {
         sendEvent({ type: "phase", phase: "analyzing-image", message: "分析圖片中..." });
         try {
+          ensureClientConnected();
           const imgBuffer = fs.readFileSync(req.file.path);
           const imgTimeout = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error("image analysis timeout")), 60000)
@@ -524,8 +543,10 @@ router.post(
             ),
             imgTimeout,
           ]);
+          ensureClientConnected();
           imagePart = imgResult.text;
         } catch (imgErr) {
+          if ((imgErr as Error)?.name === "ClientAbortError") throw imgErr;
           console.error("[chat] Image analysis failed:", imgErr);
           imagePart = "（圖片分析失敗）";
         }
@@ -551,6 +572,7 @@ router.post(
       const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
 
       // 4. AI-based agent selection with reasoning
+      ensureClientConnected();
       sendEvent({ type: "phase", phase: "analyzing", message: "AI 分析訊息，選擇最適合的好友..." });
 
       // Build agent selection input — text question is primary intent, image is auxiliary
@@ -560,6 +582,7 @@ router.post(
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
       const { selections, summary: selectionSummary } = await selectAgentsWithAI(selectionInput, 3);
+      ensureClientConnected();
 
       // Build intent data from AI selections
       const reasonsMap: Record<string, string> = {};
@@ -606,6 +629,7 @@ router.post(
       const userCustomInstructions = chatUserData?.custom_instructions || '';
 
       // 5. Run agents in parallel (callGeminiWithRetry handles keys internally)
+      ensureClientConnected();
       const agentPromises = selectedAgents.map((agent) => {
         return runChatAgent(
           agent,
@@ -632,6 +656,7 @@ router.post(
       });
 
       const agentResults = await Promise.all(agentPromises);
+      ensureClientConnected();
 
       // Always continue to synthesis + save, even if client disconnected
       // (so the response is stored in DB for next page load)
@@ -715,6 +740,7 @@ router.post(
           "INSERT INTO chat_messages (session_id, role, content, ai_agents, dispatch_reason) VALUES (?, 'assistant', ?, ?, ?)"
         )
         .run(sessionId, aiResponse, aiAgentsJson, dispatchReason);
+      assistantSaved = true;
 
       const assistantMessage = sqlite
         .prepare("SELECT * FROM chat_messages WHERE id = ?")
@@ -766,13 +792,23 @@ router.post(
         memoryUpdated,
       });
     } catch (err: any) {
-      console.error("[chat] SSE message error:", err);
-      sendEvent({
-        type: "error",
-        message: err.message || "處理訊息時發生錯誤",
-      });
+      if (err?.name === "ClientAbortError" || err?.message === "client-aborted") {
+        console.warn("[chat] Client aborted in-flight chat request");
+      } else {
+        console.error("[chat] SSE message error:", err);
+        sendEvent({
+          type: "error",
+          message: err.message || "處理訊息時發生錯誤",
+        });
+      }
     } finally {
       clearInterval(heartbeat);
+      if (aborted && userMessageId && !assistantSaved) {
+        sqlite.prepare("DELETE FROM chat_messages WHERE id = ? AND role = 'user'").run(userMessageId);
+        if (req.file?.path) {
+          try { fs.unlinkSync(req.file.path); } catch {}
+        }
+      }
       if (!aborted) res.end();
     }
   }

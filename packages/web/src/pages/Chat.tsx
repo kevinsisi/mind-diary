@@ -591,6 +591,7 @@ export default function Chat() {
   const [folders, setFolders] = useState<ChatFolder[]>([]);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<number>>(new Set());
   const isComposingRef = useRef(false);
+  const sendCancelledRef = useRef(false);
   const [showNewFolder, setShowNewFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [movingSessionId, setMovingSessionId] = useState<number | null>(null);
@@ -917,10 +918,12 @@ export default function Chat() {
 
     const imageFile = chatImage;
     const messageContent = content || (imageFile ? '🖼️ [圖片]' : '');
+    const originalInput = input;
 
     setInput('');
     clearChatImage();
     setSendingMessage(true);
+    sendCancelledRef.current = false;
 
     // Optimistic: add user message immediately (with local preview URL for image)
     const tempUserMsg: Message = {
@@ -1145,8 +1148,16 @@ export default function Chat() {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        // SSE was aborted (page went to background) — backend still processing
-        // Do NOT restore input; we'll reload from DB in finally
+        const wasCancelled = sendCancelledRef.current;
+        if (wasCancelled) {
+          setMessages((prev) => prev.filter((m) => m.id !== tempUserMsg.id));
+          setCurrentThinking(null);
+          setInput(originalInput);
+          if (imageFile) {
+            setChatImage(imageFile);
+            setChatImagePreview(URL.createObjectURL(imageFile));
+          }
+        }
       } else {
         console.error('Failed to send message:', err);
         // Remove optimistic message on real error
@@ -1157,8 +1168,8 @@ export default function Chat() {
     } finally {
       abortControllerRef.current = null;
       // If SSE ended without a complete event (connection drop / abort), reload from DB
-      // Backend continues processing and saves the result even after client disconnects
-      if (!gotComplete && sessionId) {
+      // unless the user explicitly cancelled this send.
+      if (!gotComplete && sessionId && !sendCancelledRef.current) {
         try {
           await loadMessages(sessionId);
         } catch {
@@ -1169,6 +1180,11 @@ export default function Chat() {
       setSendingMessage(false);
       inputRef.current?.focus();
     }
+  };
+
+  const cancelInFlightMessage = () => {
+    sendCancelledRef.current = true;
+    abortControllerRef.current?.abort();
   };
 
   // ── Key handler for textarea ────────────────────────────────────
@@ -1542,13 +1558,13 @@ export default function Chat() {
                     disabled={sendingMessage}
                   />
                   <button
-                    onClick={sendMessage}
-                    disabled={(!input.trim() && !chatImage) || sendingMessage}
-                    className="flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    title="發送訊息"
+                    onClick={sendingMessage ? cancelInFlightMessage : sendMessage}
+                    disabled={!sendingMessage && !input.trim() && !chatImage}
+                    className={`flex-shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-xl text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${sendingMessage ? 'bg-red-600 hover:bg-red-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                    title={sendingMessage ? '取消送出' : '發送訊息'}
                   >
                     {sendingMessage ? (
-                      <Loader2 size={18} className="animate-spin" />
+                      <X size={18} />
                     ) : (
                       <Send size={18} />
                     )}
