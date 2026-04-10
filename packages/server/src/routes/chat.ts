@@ -107,6 +107,9 @@ ${agent.systemPrompt}
 
   // Text question is the primary intent
   let prompt = `使用者的問題（主要回應目標）：${userMessage}`;
+  if (isPlanningIntent(userMessage)) {
+    prompt += `\n\n【回應要求】這是規劃/安排型需求。請先給具體可執行的下一步、可選方向或待辦拆解，不要只做情緒陪伴或空泛鼓勵。`;
+  }
   if (imagePart) prompt += `\n\n【使用者同時上傳了圖片（輔助資訊，不要忽視文字問題）】\n${imagePart}`;
   if (memoryStr) prompt += `\n\n【使用者跨對話記憶（僅供參考）】\n${memoryStr}`;
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
@@ -183,6 +186,9 @@ async function synthesizeChat(
     .join("、");
 
   let prompt = `使用者的問題（主要回應目標）：${userMessage}\n\n`;
+  if (isPlanningIntent(userMessage)) {
+    prompt += `【回應要求】這是規劃/安排型需求。整體回覆要優先提供具體方案、待辦清單、下一步或可直接複製的整理，不要只有情緒支持。\n\n`;
+  }
   if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
   if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
@@ -199,6 +205,10 @@ function createClientAbortError(): Error {
   const error = new Error("client-aborted");
   error.name = "ClientAbortError";
   return error;
+}
+
+function isPlanningIntent(userMessage: string): boolean {
+  return /旅行|旅遊|行程|規劃|安排|韓國|日本|首爾|大阪|東京|出國|自由行|待辦|清單|計畫/i.test(userMessage);
 }
 
 function getOwnedChatFolder(folderId: unknown, userId: number) {

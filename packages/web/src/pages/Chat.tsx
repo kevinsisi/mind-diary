@@ -810,7 +810,12 @@ function SessionItem({
 export default function Chat() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const raw = window.sessionStorage.getItem('mind-diary:active-session-id');
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -834,6 +839,14 @@ export default function Chat() {
   // Keep refs in sync
   useEffect(() => { activeSessionIdRef.current = activeSessionId; }, [activeSessionId]);
   useEffect(() => { sendingMessageRef.current = sendingMessage; }, [sendingMessage]);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (activeSessionId) {
+      window.sessionStorage.setItem('mind-diary:active-session-id', String(activeSessionId));
+    } else {
+      window.sessionStorage.removeItem('mind-diary:active-session-id');
+    }
+  }, [activeSessionId]);
 
   // Thinking state for current streaming message
   const [currentThinking, setCurrentThinking] = useState<ThinkingData | null>(null);
@@ -970,18 +983,30 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, currentThinking]);
 
-  // ── SSE reconnect on page visibility change (mobile background) ─
+  // ── Recover active chat when returning from background on mobile ─
   useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && abortControllerRef.current) {
-        // Page returned to foreground while SSE was active → abort SSE
-        // The finally block in sendMessage will reload from DB
-        abortControllerRef.current.abort();
+    const recoverActiveSession = async () => {
+      const sessionId = activeSessionIdRef.current;
+      if (document.visibilityState !== 'visible' || !sessionId) return;
+
+      try {
+        await Promise.all([loadSessions(), loadMessages(sessionId)]);
+      } catch {
+        // ignore restore errors; user can still manually re-open session
+      } finally {
+        if (sendingMessageRef.current) {
+          setCurrentThinking(null);
+          setSendingMessage(false);
+        }
       }
     };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, []);
+    document.addEventListener('visibilitychange', recoverActiveSession);
+    window.addEventListener('pageshow', recoverActiveSession);
+    return () => {
+      document.removeEventListener('visibilitychange', recoverActiveSession);
+      window.removeEventListener('pageshow', recoverActiveSession);
+    };
+  }, [loadMessages, loadSessions]);
 
   // ── Create new session ──────────────────────────────────────────
 
