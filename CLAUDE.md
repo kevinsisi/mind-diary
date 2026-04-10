@@ -5,7 +5,7 @@
 AI 心靈日記 — a multi-agent emotional wellness journaling app powered by 13 AI personas backed by Google Gemini.
 
 - **Production:** `diary.sisihome.org:8823`
-- **Version:** 0.13.x
+- **Version:** 0.14.x
 - **Stack:** Express + TypeScript + SQLite (server) · React + Vite + Tailwind (web)
 - **Monorepo:** npm workspaces (`packages/server`, `packages/web`)
 
@@ -58,6 +58,7 @@ mind-diary/
 ```
 User message
   → selectAgentsWithAI()      # Gemini picks 2–3 relevant agents
+  → load user_memories        # user-scoped long-term memory hints
   → runChatAgent() × N        # Each agent responds independently
   → synthesizeChat()          # Master agent merges responses
   → SSE stream to client      # text/event-stream, data: <token>\n\n
@@ -83,6 +84,7 @@ User message
 | `diary_entries` | Journal entries, mood, AI reflection |
 | `chat_sessions` | Conversation containers |
 | `chat_messages` | Individual messages |
+| `user_memories` | User-scoped cross-session memory hints |
 | `files` | Uploads with PDF text extraction |
 | `api_keys` | Gemini key pool |
 | `api_key_cooldowns` | Rate-limit tracking |

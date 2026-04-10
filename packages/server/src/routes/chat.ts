@@ -9,6 +9,7 @@ import { analyzeImage } from "../ai/geminiClient.js";
 import { selectAgentsWithAI } from "../ai/diaryAnalyzer.js";
 import { IMAGES_DIR } from "./diaryImages.js";
 import { optionalAuth, requireAuth } from "../middleware/auth.js";
+import { extractAndStoreUserMemories, formatUserMemories } from "../services/userMemory.js";
 
 // ── Multer for chat image uploads (disk storage, served as static) ───
 const CHAT_IMAGES_DIR = path.join(IMAGES_DIR, "chat");
@@ -74,6 +75,7 @@ async function runChatAgent(
   agent: AgentPersona,
   userMessage: string,
   contextStr: string,
+  memoryStr: string,
   historyStr: string,
   _apiKey: string, // ignored — withStreamRetry handles key selection
   onEvent: (event: Record<string, any>) => void,
@@ -105,6 +107,7 @@ ${agent.systemPrompt}
   // Text question is the primary intent
   let prompt = `使用者的問題（主要回應目標）：${userMessage}`;
   if (imagePart) prompt += `\n\n【使用者同時上傳了圖片（輔助資訊，不要忽視文字問題）】\n${imagePart}`;
+  if (memoryStr) prompt += `\n\n【使用者跨對話記憶（僅供參考）】\n${memoryStr}`;
   if (contextStr) prompt += `\n\n【相關資料】\n${contextStr}`;
   if (historyStr) prompt += `\n\n【最近對話紀錄】\n${historyStr}`;
 
@@ -155,6 +158,7 @@ async function synthesizeChat(
   agentResults: Array<{ agentId: string; result: string }>,
   userMessage: string,
   contextStr: string,
+  memoryStr: string,
   historyStr: string,
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
@@ -178,6 +182,7 @@ async function synthesizeChat(
 
   let prompt = `使用者的問題（主要回應目標）：${userMessage}\n\n`;
   if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
+  if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
@@ -501,12 +506,15 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
 
+      const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
+
       // 4. AI-based agent selection with reasoning
       sendEvent({ type: "phase", phase: "analyzing", message: "AI 分析訊息，選擇最適合的好友..." });
 
       // Build agent selection input — text question is primary intent, image is auxiliary
       let selectionInput = `使用者的問題（主要意圖）：${content}`;
       if (imagePart) selectionInput += `\n\n【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}`;
+      if (memoryStr) selectionInput += `\n\n使用者跨對話記憶（僅供參考）：\n${memoryStr}`;
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
       const { selections, summary: selectionSummary } = await selectAgentsWithAI(selectionInput, 3);
@@ -559,6 +567,7 @@ router.post(
           agent,
           content,
           contextStr,
+          memoryStr,
           historyStr,
           "",
           sendEvent,
@@ -594,6 +603,7 @@ router.post(
           agentResults,
           content,
           contextStr,
+          memoryStr,
           historyStr,
           sendEvent,
           imagePart || undefined,
@@ -679,6 +689,20 @@ router.post(
           "SELECT id, role, content, image_url, created_at FROM chat_messages WHERE session_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1"
         )
         .get(sessionId) as { id: number; role: string; content: string; image_url: string | null; created_at: string } | undefined;
+
+      try {
+        await extractAndStoreUserMemories({
+          userId: req.userId || 0,
+          sessionId,
+          sourceMessageId: userMessage?.id ?? null,
+          userMessage: content,
+          assistantMessage: aiResponse,
+          historyStr,
+          existingMemoryStr: memoryStr,
+        });
+      } catch (memoryErr) {
+        console.error("[chat] User memory extraction failed:", memoryErr);
+      }
 
       // 9. Stream complete event
       sendEvent({

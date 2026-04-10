@@ -213,5 +213,26 @@ export function runMigrations(db: Database.Database): void {
     db.exec("ALTER TABLE users ADD COLUMN custom_instructions TEXT NOT NULL DEFAULT ''");
   }
 
+  // ── User long-term memories ─────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      summary TEXT NOT NULL,
+      source_session_id INTEGER REFERENCES chat_sessions(id) ON DELETE SET NULL,
+      source_message_id INTEGER REFERENCES chat_messages(id) ON DELETE SET NULL,
+      confidence INTEGER NOT NULL DEFAULT 50,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_user_memories_user_kind_summary
+      ON user_memories(user_id, kind, summary);
+
+    CREATE INDEX IF NOT EXISTS idx_user_memories_user_updated_at
+      ON user_memories(user_id, updated_at DESC);
+  `);
+
   console.log("[migrate] All tables and FTS indexes created.");
 }

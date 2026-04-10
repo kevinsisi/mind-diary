@@ -10,6 +10,7 @@ export const users = sqliteTable("users", {
   password_hash: text("password_hash").notNull(),
   role: text("role").notNull().default("user"), // 'admin' | 'user'
   nickname: text("nickname").notNull().default(""),
+  custom_instructions: text("custom_instructions").notNull().default(""),
   created_at: text("created_at").notNull().default(defaultNow),
 });
 
@@ -55,6 +56,19 @@ export const chatMessages = sqliteTable("chat_messages", {
   role: text("role").notNull(), // 'user' | 'assistant'
   content: text("content").notNull(),
   created_at: text("created_at").notNull().default(defaultNow),
+});
+
+// ── User Memories ───────────────────────────────────────────────────
+export const userMemories = sqliteTable("user_memories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  user_id: integer("user_id").notNull().references(() => users.id),
+  kind: text("kind").notNull(),
+  summary: text("summary").notNull(),
+  source_session_id: integer("source_session_id").references(() => chatSessions.id),
+  source_message_id: integer("source_message_id").references(() => chatMessages.id),
+  confidence: integer("confidence").notNull().default(50),
+  created_at: text("created_at").notNull().default(defaultNow),
+  updated_at: text("updated_at").notNull().default(defaultNow),
 });
 
 // ── API Keys ───────────────────────────────────────────────────────
