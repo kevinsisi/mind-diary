@@ -238,6 +238,18 @@ function buildPlanningStarter(userMessage: string): string {
   ].join("\n");
 }
 
+function getPlanningSelections(content: string) {
+  const destination = extractTravelDestination(content);
+  return {
+    selections: [
+      { agent: AGENTS.amu, reason: `把 ${destination} 旅行願望拆成可執行的規劃方向與下一步。` },
+      { agent: AGENTS.jingjing, reason: `先補上旅遊規劃最容易卡住的風險與必要確認項。` },
+      { agent: AGENTS.ajiao, reason: `當使用者說自己沒頭緒時，幫忙把焦慮拆成少量可處理的小步驟。` },
+    ],
+    summary: `這輪是旅行規劃情境，我優先邀請阿慕、驚驚、阿焦，直接把想法整理成下一步、風險確認與可執行待辦，而不是停在抽象鼓勵。`,
+  };
+}
+
 function getOwnedChatFolder(folderId: unknown, userId: number) {
   if (folderId === undefined) return undefined;
   if (folderId === null) return null;
@@ -626,7 +638,9 @@ router.post(
       if (memoryStr) selectionInput += `\n\n使用者跨對話記憶（僅供參考）：\n${memoryStr}`;
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
-      const { selections, summary: selectionSummary } = await selectAgentsWithAI(selectionInput, 3);
+      const { selections, summary: selectionSummary } = planningIntent
+        ? getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+        : await selectAgentsWithAI(selectionInput, 3);
       ensureClientConnected();
 
       // Build intent data from AI selections
