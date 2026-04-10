@@ -83,6 +83,16 @@ interface ChatSSEEvent {
   memoryUpdated?: boolean;
 }
 
+interface TodoItem {
+  text: string;
+  done: boolean;
+}
+
+interface TodoBlock {
+  title: string | null;
+  items: TodoItem[];
+}
+
 // ── Agent Color Map ──────────────────────────────────────────────
 
 const AGENT_COLORS: Record<string, string> = {
@@ -339,48 +349,145 @@ function AgentMessageCard({
   );
 }
 
-function ChatMarkdown({ children }: { children: string }) {
+function parseTodoBlocks(content: string): { blocks: TodoBlock[]; remainder: string } {
+  const lines = content.split(/\r?\n/);
+  const blocks: TodoBlock[] = [];
+  const remainder: string[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const current = lines[i];
+    const titleMatch = current.match(/^#{1,6}\s+(.+)$/);
+    const firstTaskMatch = current.match(/^\s*[-*]\s+\[( |x|X)\]\s+(.+)$/);
+
+    if (titleMatch || firstTaskMatch) {
+      const title = titleMatch ? titleMatch[1].trim() : null;
+      let j = titleMatch ? i + 1 : i;
+      while (j < lines.length && lines[j].trim() === '') j += 1;
+
+      const items: TodoItem[] = [];
+      while (j < lines.length) {
+        const match = lines[j].match(/^\s*[-*]\s+\[( |x|X)\]\s+(.+)$/);
+        if (!match) break;
+        items.push({ done: match[1].toLowerCase() === 'x', text: match[2].trim() });
+        j += 1;
+      }
+
+      if (items.length >= 2) {
+        blocks.push({ title, items });
+        i = j;
+        continue;
+      }
+    }
+
+    remainder.push(current);
+    i += 1;
+  }
+
+  return {
+    blocks,
+    remainder: remainder.join('\n').trim(),
+  };
+}
+
+function TodoBlockCard({ block }: { block: TodoBlock }) {
+  const completedCount = block.items.filter((item) => item.done).length;
+  const allDone = completedCount === block.items.length;
+  const [collapsed, setCollapsed] = useState(allDone);
+
+  useEffect(() => {
+    if (allDone) setCollapsed(true);
+  }, [allDone]);
+
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        pre: ({ children }) => (
-          <pre className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-950 text-gray-100 px-4 py-3 text-xs leading-6">
-            {children}
-          </pre>
-        ),
-        code: ({ inline, children, ...props }: any) =>
-          inline ? (
-            <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[0.9em] text-pink-700 dark:text-pink-300" {...props}>
-              {children}
-            </code>
-          ) : (
-            <code {...props}>{children}</code>
-          ),
-        ul: ({ children, ...props }) => (
-          <ul className="my-2 space-y-2 pl-0 list-none" {...props}>
-            {children}
-          </ul>
-        ),
-        li: ({ children, ...props }) => (
-          <li className="flex items-start gap-2 leading-relaxed" {...props}>
-            {children}
-          </li>
-        ),
-        input: ({ checked, ...props }) => (
-          <input
-            type="checkbox"
-            checked={checked}
-            readOnly
-            disabled
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 disabled:opacity-100"
-            {...props}
-          />
-        ),
-      }}
-    >
-      {children}
-    </ReactMarkdown>
+    <div className="my-3 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setCollapsed((value) => !value)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+      >
+        <div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            {block.title || `待辦事項`}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            已完成 {completedCount} 個待辦事項（共 {block.items.length} 個）
+          </div>
+        </div>
+        {collapsed ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+      </button>
+
+      {!collapsed && (
+        <div className="px-4 pb-4 space-y-2">
+          {block.items.map((item, index) => (
+            <div key={`${item.text}-${index}`} className={`flex items-start gap-3 text-sm ${item.done ? 'text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+              <input
+                type="checkbox"
+                checked={item.done}
+                readOnly
+                disabled
+                className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 disabled:opacity-100"
+              />
+              <span className={item.done ? 'line-through' : ''}>{item.text}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ChatMarkdown({ children }: { children: string }) {
+  const { blocks, remainder } = parseTodoBlocks(children);
+
+  return (
+    <>
+      {blocks.map((block, index) => (
+        <TodoBlockCard key={`${block.title || 'todo'}-${index}`} block={block} />
+      ))}
+      {remainder && (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            pre: ({ children }) => (
+              <pre className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-950 text-gray-100 px-4 py-3 text-xs leading-6">
+                {children}
+              </pre>
+            ),
+            code: ({ inline, children, ...props }: any) =>
+              inline ? (
+                <code className="rounded bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 text-[0.9em] text-pink-700 dark:text-pink-300" {...props}>
+                  {children}
+                </code>
+              ) : (
+                <code {...props}>{children}</code>
+              ),
+            ul: ({ children, ...props }) => (
+              <ul className="my-2 space-y-2 pl-0 list-none" {...props}>
+                {children}
+              </ul>
+            ),
+            li: ({ children, ...props }) => (
+              <li className="flex items-start gap-2 leading-relaxed" {...props}>
+                {children}
+              </li>
+            ),
+            input: ({ checked, ...props }) => (
+              <input
+                type="checkbox"
+                checked={checked}
+                readOnly
+                disabled
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-indigo-600 disabled:opacity-100"
+                {...props}
+              />
+            ),
+          }}
+        >
+          {remainder}
+        </ReactMarkdown>
+      )}
+    </>
   );
 }
 
