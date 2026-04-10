@@ -25,21 +25,34 @@ router.get("/", requireAuth, (req: Request, res: Response) => {
   }
 });
 
-// DELETE /api/tags/:id — delete tag (cascade removes junction rows)
-router.delete("/:id", (req: Request, res: Response) => {
+// DELETE /api/tags/:id — remove tag from current user's entries only
+router.delete("/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
     const existing = sqlite
-      .prepare("SELECT id FROM tags WHERE id = ?")
-      .get(id);
+      .prepare(
+        `SELECT DISTINCT t.id
+         FROM tags t
+         JOIN diary_entry_tags dt ON dt.tag_id = t.id
+         JOIN diary_entries d ON d.id = dt.diary_id
+         WHERE t.id = ? AND d.user_id = ?`
+      )
+      .get(id, req.userId);
 
     if (!existing) {
       return res.status(404).json({ error: "標籤不存在" });
     }
 
-    sqlite.prepare("DELETE FROM diary_entry_tags WHERE tag_id = ?").run(id);
-    sqlite.prepare("DELETE FROM tags WHERE id = ?").run(id);
+    sqlite.prepare(
+      `DELETE FROM diary_entry_tags
+       WHERE tag_id = ? AND diary_id IN (SELECT id FROM diary_entries WHERE user_id = ?)`
+    ).run(id, req.userId);
+
+    const remainingUsage = sqlite.prepare("SELECT 1 FROM diary_entry_tags WHERE tag_id = ? LIMIT 1").get(id);
+    if (!remainingUsage) {
+      sqlite.prepare("DELETE FROM tags WHERE id = ?").run(id);
+    }
 
     res.json({ success: true });
   } catch (err: any) {

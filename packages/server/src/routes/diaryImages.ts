@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
 import { analyzeImage } from "../ai/geminiClient.js";
+import { optionalAuth } from "../middleware/auth.js";
 
 // ── Multer config ─────────────────────────────────────────────────────
 const IMAGES_DIR = path.resolve(
@@ -46,6 +47,7 @@ const upload = multer({
 
 // ── Router ────────────────────────────────────────────────────────────
 const router = Router({ mergeParams: true });
+router.use(optionalAuth);
 
 // POST /api/diary/:id/images — upload image(s) to a diary entry
 router.post("/", upload.array("images", 10), async (req: Request, res: Response) => {
@@ -53,8 +55,8 @@ router.post("/", upload.array("images", 10), async (req: Request, res: Response)
     const diaryId = Number(req.params.id);
 
     const entry = sqlite
-      .prepare("SELECT id FROM diary_entries WHERE id = ?")
-      .get(diaryId);
+      .prepare("SELECT id FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(diaryId, req.userId);
     if (!entry) {
       return res.status(404).json({ error: "日記不存在" });
     }
@@ -103,8 +105,8 @@ router.get("/", (req: Request, res: Response) => {
     const diaryId = Number(req.params.id);
 
     const entry = sqlite
-      .prepare("SELECT id FROM diary_entries WHERE id = ?")
-      .get(diaryId);
+      .prepare("SELECT id FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(diaryId, req.userId);
     if (!entry) {
       return res.status(404).json({ error: "日記不存在" });
     }
@@ -127,6 +129,13 @@ router.delete("/:imageId", (req: Request, res: Response) => {
   try {
     const diaryId = Number(req.params.id);
     const imageId = Number(req.params.imageId);
+
+    const entry = sqlite
+      .prepare("SELECT id FROM diary_entries WHERE id = ? AND user_id = ?")
+      .get(diaryId, req.userId);
+    if (!entry) {
+      return res.status(404).json({ error: "日記不存在" });
+    }
 
     const image = sqlite
       .prepare("SELECT * FROM diary_images WHERE id = ? AND diary_id = ?")

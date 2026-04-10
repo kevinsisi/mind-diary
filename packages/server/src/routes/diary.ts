@@ -36,6 +36,20 @@ function getEntryImages(entryId: number): any[] {
   }));
 }
 
+function getOwnedFolderId(folderId: unknown, userId: number) {
+  if (folderId === undefined) return undefined;
+  if (folderId === null) return null;
+
+  const parsed = Number(folderId);
+  if (!Number.isInteger(parsed) || parsed <= 0) return false;
+
+  const folder = sqlite
+    .prepare("SELECT id FROM folders WHERE id = ? AND user_id = ?")
+    .get(parsed, userId) as { id: number } | undefined;
+
+  return folder ? parsed : false;
+}
+
 function upsertTagsForEntry(entryId: number, tagNames: string[]): void {
   // Remove existing junction rows
   sqlite.prepare("DELETE FROM diary_entry_tags WHERE diary_id = ?").run(entryId);
@@ -57,9 +71,14 @@ function upsertTagsForEntry(entryId: number, tagNames: string[]): void {
 router.post("/", async (req: Request, res: Response) => {
   try {
     const { title, content, mood, folder_id } = req.body;
+    const ownedFolderId = getOwnedFolderId(folder_id, req.userId);
 
     if (!content) {
       return res.status(400).json({ error: "內容為必填" });
+    }
+
+    if (ownedFolderId === false) {
+      return res.status(400).json({ error: "無效的資料夾" });
     }
 
     // Auto-generate title with AI if not provided
@@ -80,7 +99,7 @@ router.post("/", async (req: Request, res: Response) => {
       INSERT INTO diary_entries (title, content, mood, folder_id, user_id)
       VALUES (?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(finalTitle, content, mood || null, folder_id || null, req.userId);
+    const result = stmt.run(finalTitle, content, mood || null, ownedFolderId ?? null, req.userId);
     const entryId = result.lastInsertRowid as number;
 
     // Index in FTS5
@@ -201,7 +220,11 @@ router.put("/:id", (req: Request, res: Response) => {
     const newTitle = title ?? existing.title;
     const newContent = content ?? existing.content;
     const newMood = mood !== undefined ? mood : existing.mood;
-    const newFolderId = folder_id !== undefined ? (folder_id || null) : existing.folder_id;
+    const ownedFolderId = getOwnedFolderId(folder_id, req.userId);
+    if (ownedFolderId === false) {
+      return res.status(400).json({ error: "無效的資料夾" });
+    }
+    const newFolderId = ownedFolderId !== undefined ? ownedFolderId : existing.folder_id;
 
     sqlite
       .prepare(

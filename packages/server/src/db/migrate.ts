@@ -154,6 +154,16 @@ export function runMigrations(db: Database.Database): void {
       ON chat_folders(user_id, sort_order, created_at);
   `);
 
+  const folderCols = db.prepare("PRAGMA table_info(folders)").all() as any[];
+  if (!folderCols.some((c: any) => c.name === "user_id")) {
+    db.exec("ALTER TABLE folders ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0 REFERENCES users(id)");
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_folders_user_sort
+      ON folders(user_id, sort_order, created_at);
+  `);
+
   // Diary images (attached to diary entries)
   db.exec(`
     CREATE TABLE IF NOT EXISTS diary_images (
@@ -221,6 +231,41 @@ export function runMigrations(db: Database.Database): void {
   const userColsRefreshed = db.prepare("PRAGMA table_info(users)").all() as any[];
   if (!userColsRefreshed.some((c: any) => c.name === "custom_instructions")) {
     db.exec("ALTER TABLE users ADD COLUMN custom_instructions TEXT NOT NULL DEFAULT ''");
+  }
+
+  const legacyChatFolders = db.prepare("SELECT id, name, icon, sort_order, created_at FROM chat_folders WHERE user_id = 0").all() as any[];
+  const setChatFolderOwner = db.prepare("UPDATE chat_folders SET user_id = ? WHERE id = ?");
+  const cloneChatFolder = db.prepare(
+    `INSERT INTO chat_folders (name, icon, sort_order, created_at, user_id)
+     VALUES (?, ?, ?, ?, ?)`
+  );
+  const moveChatSessionsToFolder = db.prepare("UPDATE chat_sessions SET folder_id = ? WHERE folder_id = ? AND user_id = ?");
+  const chatFolderOwnersStmt = db.prepare(
+    `SELECT DISTINCT user_id FROM chat_sessions WHERE folder_id = ? AND user_id != 0 ORDER BY user_id ASC`
+  );
+
+  for (const folder of legacyChatFolders) {
+    const owners = chatFolderOwnersStmt.all(folder.id) as Array<{ user_id: number }>;
+    if (owners.length === 0) continue;
+
+    setChatFolderOwner.run(owners[0].user_id, folder.id);
+    for (const owner of owners.slice(1)) {
+      const clone = cloneChatFolder.run(folder.name, folder.icon, folder.sort_order, folder.created_at, owner.user_id);
+      moveChatSessionsToFolder.run(clone.lastInsertRowid, folder.id, owner.user_id);
+    }
+  }
+
+  const legacyFolders = db.prepare("SELECT id FROM folders WHERE user_id = 0").all() as Array<{ id: number }>;
+  const setFolderOwner = db.prepare("UPDATE folders SET user_id = ? WHERE id = ?");
+  const folderOwnersStmt = db.prepare(
+    `SELECT DISTINCT user_id FROM diary_entries WHERE folder_id = ? AND user_id != 0 ORDER BY user_id ASC`
+  );
+
+  for (const folder of legacyFolders) {
+    const owners = folderOwnersStmt.all(folder.id) as Array<{ user_id: number }>;
+    if (owners.length === 1) {
+      setFolderOwner.run(owners[0].user_id, folder.id);
+    }
   }
 
   // ── User long-term memories ─────────────────────────────────────
