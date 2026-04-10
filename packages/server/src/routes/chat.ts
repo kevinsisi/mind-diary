@@ -159,6 +159,32 @@ const MASTER_CHAT_PROMPT = `你是心靈日記的 AI 助手，正在和使用者
 
 （每位好友之間空一行）`;
 
+const PLANNING_CHAT_PROMPT = `你是旅行與規劃助理。多位 AI 好友已經提供觀點，但你現在要直接幫使用者往前推進。
+
+規則：
+- 繁體中文
+- 不要再用夥伴人格格式輸出
+- 先給一版「可直接開始」的規劃，不要只講空泛鼓勵
+- 缺資料時可以先做合理假設，但要明說你假設了什麼
+- 優先輸出可執行內容：草案、待辦、下一步、可複製整理
+- 內容務實、簡潔、有條理
+
+輸出格式：
+## 先給你一版方向
+<1-2 句，直接說明你怎麼先幫他規劃>
+
+## 可直接開始的規劃
+- [ ] ...
+- [ ] ...
+
+## 我先幫你假設
+- ...
+
+## 下一步我可以直接幫你做
+1. ...
+2. ...
+3. ...`;
+
 async function synthesizeChat(
   agentResults: Array<{ agentId: string; result: string }>,
   userMessage: string,
@@ -197,6 +223,42 @@ async function synthesizeChat(
   prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題。`;
 
   const fullText = await callGeminiText(buildNicknameInstruction(nickname || '') + MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
+  onEvent({ type: "synthesizing", content: fullText });
+  return fullText;
+}
+
+async function synthesizePlanningChat(
+  agentResults: Array<{ agentId: string; result: string }>,
+  userMessage: string,
+  contextStr: string,
+  memoryStr: string,
+  historyStr: string,
+  onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
+  nickname?: string,
+): Promise<string> {
+  onEvent({ type: "synthesizing", message: "🧭 整理規劃中..." });
+
+  const analysisBlock = agentResults
+    .map((r) => {
+      const agent = AGENTS[r.agentId];
+      return `【${agent.name}】\n${r.result}`;
+    })
+    .join("\n\n");
+
+  let prompt = `使用者的規劃需求：${userMessage}\n\n`;
+  if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
+  if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
+  if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
+  if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+  prompt += `以下是各位好友的規劃觀點：\n\n${analysisBlock}`;
+
+  const fullText = await callGeminiText(buildNicknameInstruction(nickname || '') + PLANNING_CHAT_PROMPT, prompt, 2200, {
+    maxRetries: 5,
+    callType: "chat-planning-master",
+    disableThinking: true,
+    timeoutMs: 30000,
+  });
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
@@ -727,16 +789,27 @@ router.post(
 
       let aiResponse: string;
       try {
-        aiResponse = await synthesizeChat(
-          agentResults,
-          content,
-          contextStr,
-          memoryStr,
-          historyStr,
-          sendEvent,
-          imagePart || undefined,
-          userNickname,
-        );
+        aiResponse = planningIntent
+          ? await synthesizePlanningChat(
+              agentResults,
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+            )
+          : await synthesizeChat(
+              agentResults,
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+            );
       } catch (synthesisErr: any) {
         console.error("[chat] Synthesis failed, using fallback:", synthesisErr);
         aiResponse = buildFallbackChatResponse(agentResults);
