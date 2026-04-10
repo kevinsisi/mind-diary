@@ -207,8 +207,9 @@ function createClientAbortError(): Error {
   return error;
 }
 
-function isPlanningIntent(userMessage: string): boolean {
-  return /旅行|旅遊|行程|規劃|安排|韓國|日本|首爾|大阪|東京|出國|自由行|待辦|清單|計畫/i.test(userMessage);
+function isPlanningIntent(...inputs: Array<string | undefined>): boolean {
+  const combined = inputs.filter(Boolean).join("\n");
+  return /旅行|旅遊|行程|規劃|安排|韓國|日本|首爾|釜山|濟州|大阪|東京|京都|福岡|沖繩|出國|自由行|待辦|清單|計畫|沒有頭緒|沒頭緒/i.test(combined);
 }
 
 function extractTravelDestination(userMessage: string): string {
@@ -517,6 +518,9 @@ router.post(
           .get(sessionId) as { count: number }
       ).count;
       const isFirstMessage = msgCount === 1;
+      const sessionMeta = sqlite
+        .prepare("SELECT title FROM chat_sessions WHERE id = ? AND user_id = ?")
+        .get(sessionId, req.userId) as { title: string } | undefined;
 
       // 2. Search FTS5 for relevant context
       sendEvent({ type: "phase", phase: "searching", message: "搜尋相關資料..." });
@@ -606,6 +610,7 @@ router.post(
         .slice(0, -1) // exclude the just-inserted user message (it's the prompt)
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
+      const planningIntent = isPlanningIntent(content, historyStr, sessionMeta?.title);
 
       const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
 
@@ -615,6 +620,8 @@ router.post(
 
       // Build agent selection input — text question is primary intent, image is auxiliary
       let selectionInput = `使用者的問題（主要意圖）：${content}`;
+      if (sessionMeta?.title) selectionInput += `\n\n當前對話標題：${sessionMeta.title}`;
+      if (historyStr) selectionInput += `\n\n最近對話脈絡：\n${historyStr}`;
       if (imagePart) selectionInput += `\n\n【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}`;
       if (memoryStr) selectionInput += `\n\n使用者跨對話記憶（僅供參考）：\n${memoryStr}`;
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
@@ -722,7 +729,7 @@ router.post(
         sendEvent({ type: "synthesizing", content: aiResponse });
       }
 
-      if (isPlanningIntent(content) && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
+      if (planningIntent && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
         aiResponse = `${aiResponse.trim()}\n${buildPlanningStarter(content)}`;
       }
 
