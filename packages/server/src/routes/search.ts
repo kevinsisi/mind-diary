@@ -9,12 +9,59 @@ router.use(optionalAuth);
 
 interface SearchResult {
   id: number;
-  source: "file" | "diary";
+  source: "file" | "diary" | "chat";
   title: string;
   snippet: string;
   created_at: string;
   rank: number;
   tags?: string[];
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildHighlightedSnippet(text: string | null | undefined, query: string, fallback = ""): string {
+  const source = (text || fallback || "").trim();
+  if (!source) return "";
+
+  const normalizedSource = source.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  const matchIndex = normalizedSource.indexOf(normalizedQuery);
+  const start = matchIndex >= 0 ? Math.max(0, matchIndex - 24) : 0;
+  const end = matchIndex >= 0 ? Math.min(source.length, matchIndex + query.length + 48) : Math.min(source.length, 96);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < source.length ? "..." : "";
+  const excerpt = source.slice(start, end);
+
+  if (matchIndex < 0) {
+    return `${prefix}${escapeHtml(excerpt)}${suffix}`;
+  }
+
+  const localIndex = matchIndex - start;
+  const before = escapeHtml(excerpt.slice(0, localIndex));
+  const match = escapeHtml(excerpt.slice(localIndex, localIndex + query.length));
+  const after = escapeHtml(excerpt.slice(localIndex + query.length));
+  return `${prefix}${before}<mark>${match}</mark>${after}${suffix}`;
+}
+
+function computeScore(title: string, snippetSource: string, query: string, base: number): number {
+  const normalizedTitle = title.toLowerCase();
+  const normalizedSnippet = snippetSource.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
+  let score = base;
+
+  if (normalizedTitle === normalizedQuery) score += 140;
+  else if (normalizedTitle.includes(normalizedQuery)) score += 90;
+
+  if (normalizedSnippet.includes(normalizedQuery)) score += 35;
+
+  return score;
 }
 
 function getEntryTags(entryId: number): string[] {
@@ -36,8 +83,17 @@ router.get("/", (req: Request, res: Response) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
     const offset = (page - 1) * limit;
     const userId = req.userId;
+    const normalizedQuery = q.toLowerCase();
 
     const results: SearchResult[] = [];
+    const seen = new Set<string>();
+
+    const pushResult = (result: SearchResult) => {
+      const key = `${result.source}:${result.id}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      results.push(result);
+    };
 
     // Search files FTS5 — JOIN main table to filter by user_id
     try {
@@ -55,15 +111,51 @@ router.get("/", (req: Request, res: Response) => {
           WHERE files_fts MATCH ? AND f.user_id = ?
           ORDER BY files_fts.rank`
         )
-        .all(q, userId) as SearchResult[];
+        .all(q, userId) as Array<SearchResult & { content_text?: string | null; filename?: string }>;
 
-      results.push(...fileResults);
+      for (const result of fileResults) {
+        pushResult({
+          ...result,
+          rank: computeScore(result.title, result.snippet || result.content_text || "", q, 220),
+        });
+      }
     } catch {
       // FTS match can fail on syntax errors; skip
     }
 
+    // Fallback: LIKE search for files (filename/content_text/ai_summary)
+    try {
+      const fileLikeResults = sqlite
+        .prepare(
+          `SELECT
+            f.id,
+            'file' as source,
+            f.filename as title,
+            f.content_text,
+            f.ai_summary,
+            f.created_at,
+            0 as rank
+          FROM files f
+          WHERE (f.filename LIKE ? OR f.content_text LIKE ? OR f.ai_summary LIKE ?) AND f.user_id = ?
+          ORDER BY f.created_at DESC`
+        )
+        .all(`%${q}%`, `%${q}%`, `%${q}%`, userId) as Array<{ id: number; source: 'file'; title: string; content_text: string | null; ai_summary: string | null; created_at: string; rank: number }>;
+
+      for (const result of fileLikeResults) {
+        pushResult({
+          id: result.id,
+          source: result.source,
+          title: result.title,
+          snippet: buildHighlightedSnippet(result.content_text || result.ai_summary || result.title, q, result.title),
+          created_at: result.created_at,
+          rank: computeScore(result.title, `${result.content_text || ''} ${result.ai_summary || ''}`, q, 120),
+        });
+      }
+    } catch {
+      // skip
+    }
+
     // Search diary FTS5 (title + content) — filter by user_id
-    const foundDiaryIds = new Set<number>();
     try {
       const diaryResults = sqlite
         .prepare(
@@ -83,9 +175,9 @@ router.get("/", (req: Request, res: Response) => {
 
       for (const r of diaryResults) {
         r.tags = getEntryTags(r.id);
-        foundDiaryIds.add(r.id);
+        r.rank = computeScore(r.title, r.snippet, q, 240);
+        pushResult(r);
       }
-      results.push(...diaryResults);
     } catch {
       // FTS match can fail on syntax errors; skip
     }
@@ -108,11 +200,38 @@ router.get("/", (req: Request, res: Response) => {
         .all(`%${q}%`, `%${q}%`, userId) as SearchResult[];
 
       for (const r of likeResults) {
-        if (!foundDiaryIds.has(r.id)) {
-          r.tags = getEntryTags(r.id);
-          foundDiaryIds.add(r.id);
-          results.push(r);
-        }
+        r.tags = getEntryTags(r.id);
+        r.snippet = buildHighlightedSnippet(r.snippet, q, r.title);
+        r.rank = computeScore(r.title, r.snippet, q, 160);
+        pushResult(r);
+      }
+    } catch {
+      // skip
+    }
+
+    // Search diary image descriptions (images are analyzed on upload)
+    try {
+      const imageResults = sqlite
+        .prepare(
+          `SELECT DISTINCT
+            d.id,
+            'diary' as source,
+            d.title,
+            di.ai_description as snippet,
+            d.created_at,
+            0 as rank
+          FROM diary_entries d
+          JOIN diary_images di ON di.diary_id = d.id
+          WHERE di.ai_description LIKE ? AND d.user_id = ?
+          ORDER BY d.created_at DESC`
+        )
+        .all(`%${q}%`, userId) as SearchResult[];
+
+      for (const r of imageResults) {
+        r.tags = getEntryTags(r.id);
+        r.snippet = buildHighlightedSnippet(r.snippet, q, r.title);
+        r.rank = computeScore(r.title, r.snippet, q, 145);
+        pushResult(r);
       }
     } catch {
       // skip
@@ -138,18 +257,18 @@ router.get("/", (req: Request, res: Response) => {
         .all(`%${q}%`, userId) as SearchResult[];
 
       for (const r of tagResults) {
-        if (!foundDiaryIds.has(r.id)) {
-          r.tags = getEntryTags(r.id);
-          results.push(r);
-        }
+        r.tags = getEntryTags(r.id);
+        r.snippet = buildHighlightedSnippet(r.snippet, q, r.title);
+        r.rank = computeScore(r.title, r.tags.join(" "), q, 130);
+        pushResult(r);
       }
     } catch {
       // skip
     }
 
-    // Search chat sessions by title — filter by user_id
+    // Search chat sessions by title or message content — filter by user_id
     try {
-      const chatResults = sqlite
+      const chatTitleResults = sqlite
         .prepare(
           `SELECT
             s.id,
@@ -167,13 +286,42 @@ router.get("/", (req: Request, res: Response) => {
         )
         .all(`%${q}%`, userId) as SearchResult[];
 
-      results.push(...chatResults);
+      for (const result of chatTitleResults) {
+        result.snippet = buildHighlightedSnippet(result.snippet || result.title, q, result.title);
+        result.rank = computeScore(result.title, result.snippet, q, 170);
+        pushResult(result);
+      }
+
+      const chatMessageResults = sqlite
+        .prepare(
+          `SELECT
+            s.id,
+            'chat' as source,
+            s.title,
+            cm.content as snippet,
+            s.created_at,
+            0 as rank
+          FROM chat_sessions s
+          JOIN chat_messages cm ON cm.session_id = s.id
+          WHERE cm.content LIKE ? AND s.user_id = ?
+          ORDER BY cm.created_at DESC`
+        )
+        .all(`%${q}%`, userId) as SearchResult[];
+
+      for (const result of chatMessageResults) {
+        result.snippet = buildHighlightedSnippet(result.snippet, q, result.title);
+        result.rank = computeScore(result.title, result.snippet, q, 155);
+        pushResult(result);
+      }
     } catch {
       // skip
     }
 
-    // Sort combined results by FTS5 rank (lower is better)
-    results.sort((a, b) => a.rank - b.rank);
+    // Sort by relevance first, then newest first.
+    results.sort((a, b) => {
+      if (b.rank !== a.rank) return b.rank - a.rank;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
     const total = results.length;
     const paginated = results.slice(offset, offset + limit);

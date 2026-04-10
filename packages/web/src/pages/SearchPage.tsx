@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import { Search, FileText, BookOpen, Loader2 } from 'lucide-react';
+import { Search, FileText, BookOpen, Loader2, MessageCircle } from 'lucide-react';
 import { apiClient } from '../api/client';
 
 interface SearchResult {
   id: number;
-  source: 'file' | 'diary';
+  source: 'file' | 'diary' | 'chat';
   title: string;
   snippet: string;
   created_at: string;
@@ -22,7 +22,7 @@ interface SearchResponse {
   };
 }
 
-type FilterTab = 'all' | 'diary' | 'file';
+type FilterTab = 'all' | 'diary' | 'file' | 'chat';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -80,6 +80,7 @@ export default function SearchPage() {
     { key: 'all', label: '全部' },
     { key: 'diary', label: '日記' },
     { key: 'file', label: '檔案' },
+    { key: 'chat', label: '對話' },
   ];
 
   return (
@@ -92,7 +93,7 @@ export default function SearchPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="搜尋日記、檔案..."
+          placeholder="搜尋日記、對話、檔案..."
           className="flex-1 text-lg outline-none bg-transparent placeholder-gray-400"
         />
         <button
@@ -168,6 +169,11 @@ export default function SearchPage() {
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-indigo-100 text-indigo-700">
                           <BookOpen className="w-3 h-3" />
                           日記
+                        </span>
+                      ) : result.source === 'chat' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 text-purple-700">
+                          <MessageCircle className="w-3 h-3" />
+                          對話
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-emerald-100 text-emerald-700">

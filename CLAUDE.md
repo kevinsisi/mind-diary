@@ -5,7 +5,7 @@
 AI 心靈日記 — a multi-agent emotional wellness journaling app powered by 13 AI personas backed by Google Gemini.
 
 - **Production:** `diary.sisihome.org:8823`
-- **Version:** 0.16.0
+- **Version:** 0.17.0
 - **Stack:** Express + TypeScript + SQLite (server) · React + Vite + Tailwind (web)
 - **Monorepo:** npm workspaces (`packages/server`, `packages/web`)
 
@@ -76,7 +76,7 @@ User message
 - **Driver:** `better-sqlite3` (synchronous)
 - **File:** `DATABASE_PATH` env var (default `./data/mind-diary.db`)
 - **Schema:** `packages/server/src/db/schema.ts`
-- **FTS5 search:** `GET /api/search/?q=<query>` — spans diary entries + file content
+- **FTS5 search:** `GET /api/search/?q=<query>` — spans diary entries, diary image descriptions, chat content, and file content
 
 | Table | Purpose |
 |---|---|
