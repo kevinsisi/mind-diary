@@ -193,6 +193,22 @@ async function synthesizeChat(
   return fullText;
 }
 
+function getOwnedChatFolder(folderId: unknown, userId: number) {
+  if (folderId === undefined) return undefined;
+  if (folderId === null) return null;
+
+  const parsed = Number(folderId);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return false;
+  }
+
+  const folder = sqlite
+    .prepare("SELECT id FROM chat_folders WHERE id = ? AND user_id = ?")
+    .get(parsed, userId) as { id: number } | undefined;
+
+  return folder ? parsed : false;
+}
+
 function buildFallbackChatResponse(
   agentResults: Array<{ agentId: string; result: string }>
 ): string {
@@ -210,9 +226,11 @@ function buildFallbackChatResponse(
 // ── Chat Folders CRUD ────────────────────────────────────────────────
 
 // GET /api/chat/folders
-router.get("/folders", (_req: Request, res: Response) => {
+router.get("/folders", (req: Request, res: Response) => {
   try {
-    const folders = sqlite.prepare("SELECT * FROM chat_folders ORDER BY sort_order ASC, created_at ASC").all();
+    const folders = sqlite
+      .prepare("SELECT * FROM chat_folders WHERE user_id = ? ORDER BY sort_order ASC, created_at ASC")
+      .all(req.userId);
     res.json({ folders });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "查詢失敗" });
@@ -224,8 +242,8 @@ router.post("/folders", requireAuth, (req: Request, res: Response) => {
   try {
     const { name, icon } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: "名稱不能為空" });
-    const result = sqlite.prepare("INSERT INTO chat_folders (name, icon) VALUES (?, ?)").run(name.trim(), icon || '💬');
-    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ?").get(result.lastInsertRowid);
+    const result = sqlite.prepare("INSERT INTO chat_folders (name, icon, user_id) VALUES (?, ?, ?)").run(name.trim(), icon || '💬', req.userId);
+    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ? AND user_id = ?").get(result.lastInsertRowid, req.userId);
     res.status(201).json(folder);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "建立失敗" });
@@ -237,8 +255,13 @@ router.put("/folders/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const { name, icon } = req.body;
     const id = Number(req.params.id);
-    sqlite.prepare("UPDATE chat_folders SET name = COALESCE(?, name), icon = COALESCE(?, icon) WHERE id = ?").run(name || null, icon || null, id);
-    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ?").get(id);
+    const result = sqlite
+      .prepare("UPDATE chat_folders SET name = COALESCE(?, name), icon = COALESCE(?, icon) WHERE id = ? AND user_id = ?")
+      .run(name || null, icon || null, id, req.userId);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: "資料夾不存在" });
+    }
+    const folder = sqlite.prepare("SELECT * FROM chat_folders WHERE id = ? AND user_id = ?").get(id, req.userId);
     res.json(folder);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "更新失敗" });
@@ -249,8 +272,14 @@ router.put("/folders/:id", requireAuth, (req: Request, res: Response) => {
 router.delete("/folders/:id", requireAuth, (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
-    sqlite.prepare("UPDATE chat_sessions SET folder_id = NULL WHERE folder_id = ?").run(id);
-    sqlite.prepare("DELETE FROM chat_folders WHERE id = ?").run(id);
+    const folder = sqlite
+      .prepare("SELECT id FROM chat_folders WHERE id = ? AND user_id = ?")
+      .get(id, req.userId);
+    if (!folder) {
+      return res.status(404).json({ error: "資料夾不存在" });
+    }
+    sqlite.prepare("UPDATE chat_sessions SET folder_id = NULL WHERE folder_id = ? AND user_id = ?").run(id, req.userId);
+    sqlite.prepare("DELETE FROM chat_folders WHERE id = ? AND user_id = ?").run(id, req.userId);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "刪除失敗" });
@@ -263,7 +292,11 @@ router.delete("/folders/:id", requireAuth, (req: Request, res: Response) => {
 router.post("/sessions", (req: Request, res: Response) => {
   try {
     const title = req.body.title || "新對話";
-    const folderId = req.body.folder_id || null;
+    const folderOwnership = getOwnedChatFolder(req.body.folder_id, req.userId);
+    if (folderOwnership === false) {
+      return res.status(400).json({ error: "無效的對話資料夾" });
+    }
+    const folderId = folderOwnership === undefined ? null : folderOwnership;
     const result = sqlite
       .prepare("INSERT INTO chat_sessions (title, folder_id, user_id) VALUES (?, ?, ?)")
       .run(title, folderId, req.userId);
@@ -284,9 +317,18 @@ router.put("/sessions/:id", (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const { title, folder_id } = req.body;
-    sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title), folder_id = ? WHERE id = ? AND user_id = ?")
-      .run(title || null, folder_id !== undefined ? folder_id : null, id, req.userId);
-    const session = sqlite.prepare("SELECT * FROM chat_sessions WHERE id = ?").get(id);
+    const folderOwnership = getOwnedChatFolder(folder_id, req.userId);
+    if (folderOwnership === false) {
+      return res.status(400).json({ error: "無效的對話資料夾" });
+    }
+    if (folderOwnership === undefined) {
+      sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title) WHERE id = ? AND user_id = ?")
+        .run(title || null, id, req.userId);
+    } else {
+      sqlite.prepare("UPDATE chat_sessions SET title = COALESCE(?, title), folder_id = ? WHERE id = ? AND user_id = ?")
+        .run(title || null, folderOwnership, id, req.userId);
+    }
+    const session = sqlite.prepare("SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?").get(id, req.userId);
     res.json(session);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "更新失敗" });

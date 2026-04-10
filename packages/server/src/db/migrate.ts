@@ -144,6 +144,16 @@ export function runMigrations(db: Database.Database): void {
     );
   `);
 
+  const chatFolderCols = db.prepare("PRAGMA table_info(chat_folders)").all() as any[];
+  if (!chatFolderCols.some((c: any) => c.name === "user_id")) {
+    db.exec("ALTER TABLE chat_folders ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0 REFERENCES users(id)");
+  }
+
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_chat_folders_user_sort
+      ON chat_folders(user_id, sort_order, created_at);
+  `);
+
   // Diary images (attached to diary entries)
   db.exec(`
     CREATE TABLE IF NOT EXISTS diary_images (
