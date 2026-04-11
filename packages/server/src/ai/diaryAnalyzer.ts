@@ -137,6 +137,7 @@ async function runAgent(
   agent: AgentPersona,
   title: string,
   content: string,
+  assignedFocus: string,
   _apiKey: string, // ignored — withStreamRetry handles key
   onEvent: OnEvent,
   imageContext?: string,
@@ -163,7 +164,7 @@ async function runAgent(
     const genai = new GoogleGenerativeAI(apiKey);
     const geminiModel = genai.getGenerativeModel({
       model: modelName,
-      systemInstruction: buildNicknameInstruction(nickname || '') + buildCustomInstructions(customInstructions || '') + agent.systemPrompt,
+      systemInstruction: buildNicknameInstruction(nickname || '') + buildCustomInstructions(customInstructions || '') + agent.systemPrompt + `\n\n【本輪分工】\n- 你這輪的任務是：${assignedFocus}\n- 只專注在你被分配的角度，避免重複其他夥伴也會說的共通觀察\n- 優先補上獨特洞察、風險、需求或下一步，而不是重講摘要`,
       generationConfig: { maxOutputTokens: 2048 },
     });
 
@@ -225,7 +226,7 @@ async function synthesize(
       generationConfig: { maxOutputTokens: 8192 },
     });
 
-    const prompt = `日記標題：${title}\n\n日記內容：${content}\n\n以下是各位好友的分析：\n\n${analysisBlock}`;
+    const prompt = `日記標題：${title}\n\n日記內容：${content}\n\n以下是各位好友的分析：\n\n${analysisBlock}\n\n請把重複觀點去重後再整合，保留每位夥伴最獨特、最有價值的補充。`;
 
     let fullText = '';
     const streamResult = await model.generateContentStream(prompt);
@@ -300,7 +301,7 @@ export async function analyzeDiary(
   const keys = await assignBatchKeys(selectedAgents.length);
   const agentPromises = selectedAgents.map((agent, i) => {
     const key = keys[i % keys.length];
-    return runAgent(agent, title, content, key, onEvent, imageContext, nickname, customInstructions).catch(err => {
+    return runAgent(agent, title, content, selections[i]?.reason || `${agent.name} 補上獨特分析角度。`, key, onEvent, imageContext, nickname, customInstructions).catch(err => {
       onEvent({ type: 'error', agentId: agent.id, message: `${agent.name} 分析失敗: ${err.message}` });
       return { agentId: agent.id, result: '（分析暫時無法完成）' };
     });
