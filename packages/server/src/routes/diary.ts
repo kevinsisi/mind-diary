@@ -67,6 +67,38 @@ function upsertTagsForEntry(entryId: number, tagNames: string[]): void {
   }
 }
 
+function buildFallbackDiaryTitle(content: string): string {
+  return content.slice(0, 20) + (content.length > 20 ? '...' : '');
+}
+
+function updateDiaryTitleInBackground(entryId: number, content: string): void {
+  const fallbackTitle = buildFallbackDiaryTitle(content);
+  void (async () => {
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('diary title timeout')), 8000)
+      );
+      const generated = await Promise.race([
+        generateText(
+          `根據以下日記內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）：\n\n${content}`,
+          { maxTokens: 32 }
+        ),
+        timeout,
+      ]);
+      const cleanTitle = generated.text.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
+      if (!cleanTitle) return;
+
+      const updated = sqlite.prepare("UPDATE diary_entries SET title = ?, updated_at = datetime('now') WHERE id = ? AND title = ?").run(cleanTitle, entryId, fallbackTitle);
+      if (updated.changes > 0) {
+        sqlite.prepare("DELETE FROM diary_fts WHERE rowid = ?").run(entryId);
+        sqlite.prepare(`INSERT INTO diary_fts (rowid, title, content) VALUES (?, ?, ?)`).run(entryId, cleanTitle, content);
+      }
+    } catch (err) {
+      console.error('[diary-title] Background title generation failed:', (err as Error).message);
+    }
+  })();
+}
+
 // POST /api/diary — create entry
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -81,18 +113,10 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "無效的資料夾" });
     }
 
-    // Auto-generate title with AI if not provided
+    // Use a cheap fallback title first so create does not block on AI title generation.
     let finalTitle = (title || '').trim();
     if (!finalTitle) {
-      try {
-        const generated = await generateText(
-          `根據以下日記內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）：\n\n${content}`,
-          { maxTokens: 800 }
-        );
-        finalTitle = generated.text.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim();
-      } catch {
-        finalTitle = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' }) + ' 的日記';
-      }
+      finalTitle = buildFallbackDiaryTitle(content) || new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric' }) + ' 的日記';
     }
 
     const stmt = sqlite.prepare(`
@@ -113,7 +137,11 @@ router.post("/", async (req: Request, res: Response) => {
       .prepare("SELECT * FROM diary_entries WHERE id = ?")
       .get(entryId) as any;
 
-    res.status(201).json({ ...entry, tags: [], images: [], ai_agents: null });
+    if (!(title || '').trim()) {
+      updateDiaryTitleInBackground(entryId, content);
+    }
+
+    res.status(201).json({ ...entry, tags: [], images: [], ai_agents: null, titlePending: !(title || '').trim() });
   } catch (err: any) {
     console.error("[diary] Create error:", err);
     res.status(500).json({ error: err.message || "建立失敗" });

@@ -83,6 +83,7 @@ interface ChatSSEEvent {
   reasons?: Record<string, string>;
   summary?: string;
   memoryUpdated?: boolean;
+  titlePending?: boolean;
 }
 
 interface TodoItem {
@@ -655,6 +656,10 @@ function AssistantMessage({
       </div>
     </div>
   );
+}
+
+function buildFallbackTitle(content: string): string {
+  return content.slice(0, 20) + (content.length > 20 ? '...' : '');
 }
 
 // ── SessionItem Component ────────────────────────────────────────
@@ -1390,6 +1395,17 @@ export default function Chat() {
 
               // Refresh sessions to update lastMessage (title may update via title-updated)
               loadSessions();
+              if (event.titlePending && event.userMessage) {
+                let attempts = 0;
+                const pollTitle = () => {
+                  attempts += 1;
+                  window.setTimeout(async () => {
+                    await loadSessions();
+                    if (attempts < 4) pollTitle();
+                  }, attempts * 2500);
+                };
+                pollTitle();
+              }
             } else if (event.type === 'title-updated' && event.sessionId && event.title) {
               setSessions(prev => prev.map(s => s.id === event.sessionId ? { ...s, title: event.title! } : s));
             } else if (event.type === 'error') {

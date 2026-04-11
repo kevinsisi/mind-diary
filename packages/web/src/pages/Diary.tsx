@@ -50,6 +50,7 @@ interface DiaryEntry {
   folder_id: number | null;
   created_at: string;
   updated_at: string;
+  titlePending?: boolean;
 }
 
 interface AnalysisEvent {
@@ -116,6 +117,10 @@ function formatDate(iso: string): string {
     day: 'numeric',
     weekday: 'short',
   });
+}
+
+function buildFallbackTitle(content: string): string {
+  return content.slice(0, 20) + (content.length > 20 ? '...' : '');
 }
 
 function formatDateTime(iso: string): string {
@@ -465,6 +470,25 @@ export default function Diary() {
         const created = await apiClient.post<DiaryEntry>('/api/diary', body);
         setSelectedEntry(created);
         setEntries((prev) => [created, ...prev]);
+        if (created.titlePending) {
+          const fallbackTitle = buildFallbackTitle(editContent.trim());
+          let attempts = 0;
+          const pollTitle = () => {
+            attempts += 1;
+            window.setTimeout(async () => {
+              try {
+                const refreshed = await apiClient.get<DiaryEntry>(`/api/diary/${created.id}`);
+                setSelectedEntry(prev => prev?.id === refreshed.id ? refreshed : prev);
+                setEntries(prev => prev.map((e) => (e.id === refreshed.id ? refreshed : e)));
+                if (refreshed.title && refreshed.title !== fallbackTitle) return;
+                if (attempts < 4) pollTitle();
+              } catch {
+                if (attempts < 4) pollTitle();
+              }
+            }, attempts * 2500);
+          };
+          pollTitle();
+        }
         // Upload pending images before analysis
         await uploadPendingImages(created.id);
         // Auto-trigger multi-agent analysis

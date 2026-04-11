@@ -342,6 +342,48 @@ function buildFallbackChatResponse(
     .join("\n\n");
 }
 
+function buildFallbackSessionTitle(content: string): string {
+  return content.slice(0, 20) + (content.length > 20 ? '...' : '');
+}
+
+function updateSessionTitleInBackground(params: {
+  sessionId: number;
+  content: string;
+  aiResponse: string;
+  fallbackTitle: string;
+}): void {
+  const { sessionId, content, aiResponse, fallbackTitle } = params;
+
+  void (async () => {
+    try {
+      const titleContext = `使用者：${content.slice(0, 300)}\n\nAI 回覆：${aiResponse.slice(0, 500)}`;
+      const aiTitle = await callGeminiText(
+        '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
+        titleContext,
+        32,
+        {
+          maxRetries: 1,
+          callType: 'chat-title',
+          disableThinking: true,
+          timeoutMs: 8000,
+        },
+      );
+
+      const cleanTitle = aiTitle
+        .trim()
+        .replace(/^[「『"']+|[」』"']+$/g, '')
+        .trim()
+        .slice(0, 30);
+
+      if (cleanTitle) {
+        sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ? AND title = ?").run(cleanTitle, sessionId, fallbackTitle);
+      }
+    } catch (titleErr) {
+      console.error('[chat-title] Background title generation failed:', (titleErr as Error).message);
+    }
+  })();
+}
+
 // ── Chat Folders CRUD ────────────────────────────────────────────────
 
 // GET /api/chat/folders
@@ -592,6 +634,10 @@ router.post(
           .get(sessionId) as { count: number }
       ).count;
       const isFirstMessage = msgCount === 1;
+      const fallbackSessionTitle = buildFallbackSessionTitle(content);
+      if (isFirstMessage) {
+        sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallbackSessionTitle, sessionId);
+      }
       const sessionMeta = sqlite
         .prepare("SELECT title FROM chat_sessions WHERE id = ? AND user_id = ?")
         .get(sessionId, req.userId) as { title: string } | undefined;
@@ -820,35 +866,9 @@ router.post(
         aiResponse = `${aiResponse.trim()}\n${buildPlanningStarter(content)}`;
       }
 
-      // 6.5 Generate AI title from full conversation context (first message only)
-      // IMPORTANT: must be awaited BEFORE complete event + res.end(), otherwise
-      // the SSE stream closes before the title-updated event can be delivered.
+      // 6.5 Generate/refine AI title out-of-band so the chat response is not blocked.
       if (isFirstMessage) {
-        try {
-          const titleContext = `使用者：${content.slice(0, 300)}\n\nAI 回覆：${aiResponse.slice(0, 500)}`;
-          console.log('[chat-title] Generating title for session', sessionId);
-          const aiTitle = await callGeminiText(
-            '你是標題生成助手。根據對話內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）。標題要反映對話的實質內容（例如：討論的主題、物品、事件），不要直接照抄使用者的原話。只回傳標題本身。',
-            titleContext,
-            2048,
-            { maxRetries: 2, callType: 'chat-title', disableThinking: true },
-          );
-          const cleanTitle = aiTitle.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
-          console.log('[chat-title] Generated:', JSON.stringify(cleanTitle), '| raw length:', aiTitle.length);
-          if (cleanTitle) {
-            sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(cleanTitle, sessionId);
-            sendEvent({ type: 'title-updated', sessionId, title: cleanTitle });
-          } else {
-            console.warn('[chat-title] Empty title after cleaning, falling back');
-            throw new Error('empty title');
-          }
-        } catch (titleErr) {
-          // Fallback: use truncated user content
-          console.error('[chat-title] Title generation failed, using fallback:', (titleErr as Error).message);
-          const fallback = content.slice(0, 20) + (content.length > 20 ? '...' : '');
-          sqlite.prepare("UPDATE chat_sessions SET title = ? WHERE id = ?").run(fallback, sessionId);
-          sendEvent({ type: 'title-updated', sessionId, title: fallback });
-        }
+        updateSessionTitleInBackground({ sessionId, content, aiResponse, fallbackTitle: fallbackSessionTitle });
       }
 
       // 7. Save assistant message with ai_agents and dispatch_reason
@@ -926,6 +946,7 @@ router.post(
           created_at: assistantMessage.created_at,
         },
         memoryUpdated,
+        titlePending: isFirstMessage,
       });
     } catch (err: any) {
       if (err?.name === "ClientAbortError" || err?.message === "client-aborted") {
