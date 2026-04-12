@@ -346,6 +346,48 @@ async function synthesizePracticalAnswerChat(
   return fullText;
 }
 
+async function synthesizePracticalFallbackDirect(
+  userMessage: string,
+  contextStr: string,
+  memoryStr: string,
+  historyStr: string,
+  onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
+  nickname?: string,
+  conciseInstruction?: string,
+): Promise<string> {
+  onEvent({ type: 'synthesizing', message: '🛟 改走直接答案保底中...' });
+
+  let prompt = `使用者現在要的是直接答案或推薦：${userMessage}\n\n`;
+  if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
+  if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
+  if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
+  if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+
+  if (conciseInstruction) {
+    prompt += `【輸出要求】${conciseInstruction}\n請嚴格遵守格式要求，只輸出答案本身。`;
+  } else {
+    prompt += '請直接給可用答案，不要陪聊，不要角色格式，不要先反問。若資訊不足，可給一個主推薦和 1-2 個備選。';
+  }
+
+  const systemPrompt = conciseInstruction
+    ? buildNicknameInstruction(nickname || '') + '你是實用問題的直接回答保底助手。請直接輸出答案本身，嚴格遵守格式要求，不要角色名與 emoji。'
+    : buildNicknameInstruction(nickname || '') + '你是實用解題助理的保底模式。當多代理分析不可用時，你必須直接給使用者可執行答案。規則：繁體中文、答案優先、不要角色格式、不要情緒陪聊。';
+
+  const fullText = await callGeminiText(systemPrompt, prompt, 1200, {
+    maxRetries: 3,
+    callType: 'chat-practical-fallback',
+    disableThinking: true,
+    timeoutMs: 20000,
+  });
+  onEvent({ type: 'synthesizing', content: fullText });
+  return fullText;
+}
+
+function allAgentResultsUnavailable(agentResults: Array<{ agentId: string; result: string }>): boolean {
+  return agentResults.every((result) => String(result.result || '').includes('（暫時無法回應）'));
+}
+
 function createClientAbortError(): Error {
   const error = new Error("client-aborted");
   error.name = "ClientAbortError";
@@ -1096,6 +1138,17 @@ router.post(
               userNickname,
               conciseInstruction || undefined,
             )
+          : practicalIntent && allAgentResultsUnavailable(agentResults)
+          ? await synthesizePracticalFallbackDirect(
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+              conciseInstruction || undefined,
+            )
           : practicalIntent
           ? await synthesizePracticalAnswerChat(
               agentResults,
@@ -1121,10 +1174,31 @@ router.post(
             );
       } catch (synthesisErr: any) {
         console.error("[chat] Synthesis failed, using fallback:", synthesisErr);
-        aiResponse = conciseInstruction
-          ? buildConciseFallbackResponse(agentResults, conciseInstruction)
-          : buildFallbackChatResponse(agentResults);
-        sendEvent({ type: "synthesizing", content: aiResponse });
+        if (practicalIntent) {
+          try {
+            aiResponse = await synthesizePracticalFallbackDirect(
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+              conciseInstruction || undefined,
+            );
+          } catch (practicalFallbackErr) {
+            console.error('[chat] Practical fallback synthesis failed:', practicalFallbackErr);
+            aiResponse = conciseInstruction
+              ? buildConciseFallbackResponse(agentResults, conciseInstruction)
+              : buildFallbackChatResponse(agentResults);
+            sendEvent({ type: 'synthesizing', content: aiResponse });
+          }
+        } else {
+          aiResponse = conciseInstruction
+            ? buildConciseFallbackResponse(agentResults, conciseInstruction)
+            : buildFallbackChatResponse(agentResults);
+          sendEvent({ type: 'synthesizing', content: aiResponse });
+        }
       }
 
       if (planningIntent && !conciseInstruction && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
