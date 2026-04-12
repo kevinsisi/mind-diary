@@ -67,6 +67,7 @@
 - [x] 6.6 實作 AI 對話頁面（session 列表、資料夾、多 Agent thinking、SSE streaming）
 - [x] 6.7 實作搜尋頁面（統一搜尋、來源篩選、highlight、標籤顯示）
 - [x] 6.8 實作設定頁面（API key 管理、新增/刪除/批次匯入、usage 圖表）
+- [x] 6.9 新增 Playwright live-only UI smoke tests，涵蓋 guest 導覽／保護頁 redirect 與 chat concise reply UX
 
 ## 7. Integration / 整合部署
 
@@ -76,3 +77,4 @@
 - [x] 7.4 更新 CLAUDE.md URL routing table
 - [ ] 7.5 端到端驗證：API key 配額恢復後全功能測試
 - [x] 7.6 圖片/附件上傳整合到日記（日記內嵌圖片 + AI 分析）
+- [x] 7.7 使用 Playwright 直接對 live server 驗證 guest navigation 與 concise chat reply UI 流程

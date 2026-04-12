@@ -604,7 +604,7 @@ function AssistantMessage({
   // New agent card format
   if (parsed && parsed.length > 0) {
     return (
-      <div className="flex justify-start">
+      <div className="flex justify-start" data-message-role="assistant">
         <div className="max-w-full lg:max-w-3xl w-full space-y-2">
           {/* Dispatch reason — 夥伴小屋 */}
           {msg.dispatch_reason && (
@@ -644,7 +644,7 @@ function AssistantMessage({
 
   // Fallback: plain bubble for old messages
   return (
-    <div className="flex justify-start">
+    <div className="flex justify-start" data-message-role="assistant">
       <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-bl-md">
         <div className="prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>strong]:text-gray-900 dark:[&>strong]:text-gray-100 break-words">
           <ChatMarkdown messageId={msg.id}>{msg.content}</ChatMarkdown>
@@ -1715,7 +1715,7 @@ export default function Chat() {
 
                       {/* Message */}
                       {msg.role === 'user' ? (
-                        <div className="flex justify-end">
+                        <div className="flex justify-end" data-message-role="user">
                           <div className="max-w-[85%] lg:max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed bg-indigo-600 text-white rounded-br-md">
                             {msg.image_url && (
                               <div className="mb-2">

@@ -47,6 +47,8 @@ function syncEnvKeys(): void {
     .map((k) => k.trim())
     .filter(isValidKey);
 
+  if (envKeys.length === 0) return;
+
   const upsert = sqlite.prepare(`
     INSERT INTO api_keys (key, source, suffix, is_blocked)
     VALUES (?, 'env', ?, 0)
@@ -61,7 +63,20 @@ function syncEnvKeys(): void {
   tx();
 }
 
-syncEnvKeys();
+export function safeSyncEnvKeys(): void {
+  try {
+    syncEnvKeys();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/no such table: api_keys/i.test(message)) {
+      console.warn('[pool] Skipped env key sync before migrations:', message);
+      return;
+    }
+    throw err;
+  }
+}
+
+safeSyncEnvKeys();
 
 // ── Convenience wrappers (drop-in replacements for old keyPool.ts) ─────
 

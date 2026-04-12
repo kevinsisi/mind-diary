@@ -12,3 +12,8 @@ data/
 
 # Local AI review artifacts
 .ai-review/
+
+# Playwright artifacts
+playwright-report/
+test-results/
+e2e-artifacts/

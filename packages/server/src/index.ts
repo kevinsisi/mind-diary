@@ -18,9 +18,11 @@ import foldersRouter from './routes/folders.js';
 import tagsRouter from './routes/tags.js';
 import authRouter, { ensureUserProfileColumns } from './routes/auth.js';
 import { optionalAuth } from './middleware/auth.js';
+import { safeSyncEnvKeys } from './ai/pool.js';
 
 // ── Run migrations ─────────────────────────────────────────────────
 runMigrations(sqlite);
+safeSyncEnvKeys();
 seedAdmin(sqlite);
 ensureUserProfileColumns();
 
