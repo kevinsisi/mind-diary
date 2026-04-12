@@ -14,6 +14,10 @@ The five persona agents are:
 - **WHEN** user sends a chat message
 - **THEN** system calls `selectAgentsWithAI()` which sends the message to Gemini and receives a JSON list of 2–4 agent IDs with per-agent selection reasons and a summary explanation
 
+#### Scenario: Selection summary matches actual agents
+- **WHEN** agent selection is completed
+- **THEN** the shared selection summary only describes the agents that were actually selected, so downstream chat events and persisted metadata remain consistent with the selected agent list
+
 #### Scenario: Parallel agent execution
 - **WHEN** agents are selected
 - **THEN** system runs all agents concurrently via `Promise.all()`; each agent receives the user message, RAG context, and recent conversation history

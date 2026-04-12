@@ -41,6 +41,7 @@
 - [x] 4.10 實作統一搜尋 API：GET /api/search（FTS5 query + highlight + 分頁）
 - [x] 4.11 實作日記資料夾 CRUD + 標籤 CRUD API
 - [x] 4.12 實作 AI 自動標籤（日記建立後自動生成）
+- [x] 4.13 補強 diary 背景標題清洗與有效性檢查，避免壞 AI 標題覆蓋 fallback title
 
 ## 5. AI Agent / 對話系統
 
@@ -52,6 +53,7 @@
 - [x] 5.6 實作 AI 好友系統：agents.ts（5 personas + master prompt）
 - [x] 5.7 實作 diaryAnalyzer.ts（多 Agent 平行分析 + SSE orchestration）
 - [x] 5.8 實作對話資料夾 CRUD
+- [x] 5.9 讓共享選人摘要以實際選中的 agents 為準，避免下游 chat summary 與 selected agents 不一致
 
 ## 6. Frontend / 前端 UI
 

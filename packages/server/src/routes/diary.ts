@@ -71,6 +71,33 @@ function buildFallbackDiaryTitle(content: string): string {
   return content.slice(0, 20) + (content.length > 20 ? '...' : '');
 }
 
+function normalizeDiaryTitleCandidate(raw: string): string {
+  const candidates = String(raw || '')
+    .replace(/```(?:\w+)?\s*([\s\S]*?)```/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .split(/\r?\n/)
+    .map((line) =>
+      line
+        .trim()
+        .replace(/^(?:[#*\-]\s*|\d+[.)]\s+)/, '')
+        .replace(/^(?:標題|日記標題|繁體中文標題|中文標題|title)\s*[：:]\s*/i, '')
+        .replace(/^[「『"']+|[」』"'。！？!?,，；;:：]+$/g, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  return candidates[0] || '';
+}
+
+function isValidGeneratedDiaryTitle(title: string, fallbackTitle: string): boolean {
+  const normalized = title.trim();
+  if (!normalized || normalized === fallbackTitle) return false;
+  if (normalized.length < 2 || normalized.length > 20) return false;
+  if (/^(?:繁|繁體|繁體中文|中文|標題|日記|摘要|內容)$/.test(normalized)) return false;
+  if (/^(?:請|以下|這是)/.test(normalized)) return false;
+  return true;
+}
+
 function updateDiaryTitleInBackground(entryId: number, content: string): void {
   const fallbackTitle = buildFallbackDiaryTitle(content);
   void (async () => {
@@ -79,14 +106,18 @@ function updateDiaryTitleInBackground(entryId: number, content: string): void {
         setTimeout(() => reject(new Error('diary title timeout')), 8000)
       );
       const generated = await Promise.race([
-        generateText(
-          `根據以下日記內容，生成一個簡短的繁體中文標題（10字以內，不要加引號或標點）：\n\n${content}`,
-          { maxTokens: 32 }
-        ),
+        generateText(content, {
+          systemPrompt:
+            '你是日記標題助手。請根據使用者提供的日記內容，只輸出一個簡短的繁體中文標題。規則：10字以內、不加引號、不加前綴、不解釋、不換行。',
+          maxTokens: 32,
+        }),
         timeout,
       ]);
-      const cleanTitle = generated.text.trim().replace(/^[「『"']+|[」』"']+$/g, '').trim().slice(0, 30);
-      if (!cleanTitle) return;
+      const cleanTitle = normalizeDiaryTitleCandidate(generated.text).slice(0, 20);
+      if (!isValidGeneratedDiaryTitle(cleanTitle, fallbackTitle)) {
+        console.warn('[diary-title] Ignored invalid generated title:', generated.text);
+        return;
+      }
 
       const updated = sqlite.prepare("UPDATE diary_entries SET title = ?, updated_at = datetime('now') WHERE id = ? AND title = ?").run(cleanTitle, entryId, fallbackTitle);
       if (updated.changes > 0) {

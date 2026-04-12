@@ -7,6 +7,10 @@ The system SHALL provide full CRUD operations for diary entries. Each entry has 
 - **WHEN** user submits a new diary entry with title and content
 - **THEN** system creates the entry and returns it with generated id and timestamps
 
+#### Scenario: Fallback title is preserved on invalid AI title
+- **WHEN** a diary entry is created without a title and the background AI title result is malformed, meta, or too short to be useful
+- **THEN** system keeps the fallback title instead of overwriting it with a bad generated value
+
 #### Scenario: Update diary entry
 - **WHEN** user updates an existing diary entry's content
 - **THEN** system updates the entry and sets updated_at to current time

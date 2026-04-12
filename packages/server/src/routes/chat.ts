@@ -320,6 +320,16 @@ function getPlanningSelections(content: string) {
   };
 }
 
+function buildIntentSummaryFromSelections(
+  selections: Array<{ agent: AgentPersona; reason: string }>,
+): string {
+  if (selections.length === 0) return '這輪我邀請了幾位夥伴一起回應。';
+
+  return `這輪我邀請了${selections.map((s) => s.agent.name).join('、')}，分別從不同角度補上不重複的回應：${selections
+    .map((s) => `${s.agent.name}負責${s.reason || s.agent.role}`)
+    .join('；')}`;
+}
+
 function getOwnedChatFolder(folderId: unknown, userId: number) {
   if (folderId === undefined) return undefined;
   if (folderId === null) return null;
@@ -754,9 +764,12 @@ router.post(
       if (memoryStr) selectionInput += `\n\n使用者跨對話記憶（僅供參考）：\n${memoryStr}`;
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
-      const { selections, summary: selectionSummary } = planningIntent
+      const { selections, summary: rawSelectionSummary } = planningIntent
         ? getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
         : await selectAgentsWithAI(selectionInput, 3);
+      const selectionSummary = planningIntent
+        ? rawSelectionSummary
+        : buildIntentSummaryFromSelections(selections);
       ensureClientConnected();
 
       // Build intent data from AI selections

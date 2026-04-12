@@ -49,6 +49,8 @@ Master agent (整合者) synthesizes 2–3 selected agents per message.
 - Guest mode uses public-space data with `user_id = 0` for chat, files, search, and diary APIs; the `/diary` page itself remains login-gated in the frontend.
 - Admin user deletion must reject removing the last remaining admin account; backend must enforce this even if the UI already expects the error state.
 - Legacy `users` profile columns (`nickname`, `custom_instructions`) are backfilled once during server startup, not lazily during auth requests.
+- Diary background title generation must keep the fallback title if Gemini returns a malformed/meta title such as a single token or label-like output.
+- Shared multi-agent selection summaries must be derived from the actual selected agents so persisted summaries stay consistent with the selected agent list.
 
 ## Toolchain (added 2026-04-07)
 

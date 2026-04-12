@@ -27,6 +27,13 @@ export interface AgentSelection {
   reason: string;
 }
 
+function buildSelectionSummary(selections: AgentSelection[]): string {
+  if (selections.length === 0) return '我邀請了幾位夥伴一起回應這個問題。';
+
+  const parts = selections.map(({ agent, reason }) => `${agent.name}負責${reason || agent.role}`);
+  return `這輪我邀請了${selections.map((s) => s.agent.name).join('、')}，讓每位夥伴從不同角度補上不重複的回應：${parts.join('；')}`;
+}
+
 // Agent selection system prompt
 function buildSelectionPrompt(maxAgents: number): string {
   const agentList = Object.values(AGENTS)
@@ -105,7 +112,7 @@ export async function selectAgentsWithAI(
 
     return {
       selections,
-      summary: parsed.summary || `我請了${selections.map(s => s.agent.name).join('和')}來為你回應`,
+      summary: buildSelectionSummary(selections),
     };
   } catch (err) {
     // Error fallback: pick lele + asi as universal defaults
@@ -117,7 +124,10 @@ export async function selectAgentsWithAI(
         { agent: lele, reason: '帶著正向能量，從鼓勵的角度陪你聊聊' },
         { agent: asi, reason: '幫你看見更深層的感受和需求' },
       ],
-      summary: `我邀請了${lele.name}和${asi.name}來幫你，分別從正向鼓勵和自我覺察兩個角度回應你的問題`,
+      summary: buildSelectionSummary([
+        { agent: lele, reason: '帶著正向能量，從鼓勵的角度陪你聊聊' },
+        { agent: asi, reason: '幫你看見更深層的感受和需求' },
+      ]),
     };
   }
 }
