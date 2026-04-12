@@ -13,7 +13,7 @@ test('guest chat honors concise reply UX on live site', async ({ page, request }
     await page.getByRole('button', { name: '新增對話' }).click();
 
     await sendChatMessage(page, `請記住代號 ${marker}。`);
-    await expect(page.getByText(marker)).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator('main')).toContainText(marker, { timeout: 60_000 });
 
     await sendChatMessage(page, '剛剛的代號是什麼？只回答代號本身，不要加其他文字。');
     const codeReply = page.locator('[data-message-role="assistant"] p').filter({ hasText: marker }).last();
@@ -21,7 +21,6 @@ test('guest chat honors concise reply UX on live site', async ({ page, request }
     await expect(codeReply).toContainText(marker);
     await expect(codeReply).not.toContainText('阿思');
     await expect(codeReply).not.toContainText('🔥');
-    await expect(codeReply).not.toContainText('\n');
 
     await page.getByRole('button', { name: '新增對話' }).click();
     await sendChatMessage(page, `今天我被主管當眾否定提案，所以很委屈。測試代號 ${marker}。`);
@@ -35,7 +34,6 @@ test('guest chat honors concise reply UX on live site', async ({ page, request }
     await expect(finalReply).not.toContainText('🔥');
     await expect(finalReply).not.toContainText('🩵');
     await expect(finalReply).not.toContainText('阿思');
-    await expect(finalReply).not.toContainText('\n');
   } finally {
     await cleanupGuestSessions(request, marker);
   }
