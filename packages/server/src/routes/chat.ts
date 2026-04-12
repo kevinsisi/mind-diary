@@ -738,7 +738,7 @@ router.get("/sessions", (req: Request, res: Response) => {
   try {
     const folderId = req.query.folder_id;
     let query = `SELECT s.*,
-          (SELECT content FROM chat_messages WHERE session_id = s.id ORDER BY created_at DESC LIMIT 1) as last_message,
+          (SELECT content FROM chat_messages WHERE session_id = s.id ORDER BY id DESC LIMIT 1) as last_message,
           (SELECT COUNT(*) FROM chat_messages WHERE session_id = s.id) as message_count
         FROM chat_sessions s
         WHERE s.user_id = ?`;
@@ -957,7 +957,7 @@ router.post(
       // 3. Get conversation history (last 5 messages for context)
       const history = sqlite
         .prepare(
-          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY created_at DESC LIMIT 10"
+          "SELECT role, content FROM chat_messages WHERE session_id = ? ORDER BY id DESC LIMIT 10"
         )
         .all(sessionId) as Array<{ role: string; content: string }>;
 
