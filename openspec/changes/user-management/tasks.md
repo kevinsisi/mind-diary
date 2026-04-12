@@ -77,6 +77,6 @@
 - [ ] 10.5 部署新版 Docker image 到 RPi，確認 migration 自動執行
 - [ ] 10.6 驗收：使用 admin 帳號登入，確認現有資料可正常存取
 - [ ] 10.7 驗收：新增第二個使用者帳號，確認資料完全隔離
-- [ ] 10.8 bump version：`version.ts` + 3 個 `package.json`（root, server, web）→ commit → push
+- [x] 10.8 bump version：`version.ts` + 3 個 `package.json`（root, server, web）→ commit → push
 - [x] 10.9 補上 backend 的最後一個 admin 不可刪保護，避免只靠前端預期訊息
 - [x] 10.10 明確記錄 guest diary API 使用公共空間（user_id=0），避免與登入後的日記頁面限制混淆

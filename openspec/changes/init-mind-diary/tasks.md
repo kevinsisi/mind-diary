@@ -69,6 +69,7 @@
 - [x] 6.8 實作設定頁面（API key 管理、新增/刪除/批次匯入、usage 圖表）
 - [x] 6.9 新增 Playwright live-only UI smoke tests，涵蓋 guest 導覽／保護頁 redirect 與 chat concise reply UX
 - [x] 6.10 擴充 Playwright live-only UI smoke tests，涵蓋 guest files page/search UI 與 mobile guest navigation
+- [x] 6.11 新增 Playwright live smoke test 驗證更新日誌 modal 會顯示最新版本與摘要
 
 ## 7. Integration / 整合部署
 

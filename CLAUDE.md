@@ -5,7 +5,7 @@
 AI 心靈日記 — a multi-agent emotional wellness journaling app powered by 13 AI personas backed by Google Gemini.
 
 - **Production:** `diary.sisihome.org:8823`
-- **Version:** 0.18.5
+- **Version:** 0.18.6
 - **Stack:** Express + TypeScript + SQLite (server) · React + Vite + Tailwind (web)
 - **Monorepo:** npm workspaces (`packages/server`, `packages/web`)
 
@@ -169,3 +169,4 @@ npm run format:check  # Prettier dry-run (used in CI)
 - **AI model is `gemini-2.5-flash`** — test key pool behavior before switching models
 - **TypeScript strict mode is on** — no `any` without explicit justification comment
 - **ESLint + Prettier are enforced** — run `npm run lint` and `npm run format` before committing
+- Once the user has clearly said `繼續`, `go`, or otherwise explicitly told you to keep executing, do not stop to ask whether to continue; execute directly until the current task is finished.

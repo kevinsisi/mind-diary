@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.0';
+export const APP_VERSION = '0.18.6';
 
 export interface ReleaseNote {
   version: string;
@@ -7,6 +7,16 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '0.18.6',
+    title: '更新日誌與體驗修正已同步',
+    highlights: [
+      '更新提示現在會跟著實際版本更新，不再停留在舊內容。',
+      '日記的 AI 標題更穩定，會優先產生可用標題，避免怪異短字。',
+      '對話在「只回答一句話／只回答代號」這類明確要求下，會更準確地收斂成短答。',
+      '訪客模式的導覽、搜尋、檔案頁與手機側欄流程已補上 live UI smoke 測試。',
+    ],
+  },
   {
     version: '0.18.0',
     title: '加入版本更新提示',
