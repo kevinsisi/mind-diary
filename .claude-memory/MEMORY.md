@@ -52,6 +52,7 @@ Master agent (整合者) synthesizes 2–3 selected agents per message.
 - Diary background title generation must keep the fallback title if Gemini returns a malformed/meta title such as a single token or label-like output.
 - Shared multi-agent selection summaries must be derived from the actual selected agents so persisted summaries stay consistent with the selected agent list.
 - Explicit concise reply directives in chat (for example `只回答一句`, `只回答代號`, `不要加其他文字`) should switch final synthesis into answer-only mode instead of forcing the normal multi-agent formatted reply.
+- Practical recommendation or utility queries (for example `晚餐吃什麼`, `推薦`, `給我答案`, `幫我選`) must override reflective chat mode and produce direct answers, including follow-up turns that push for an answer.
 - Playwright E2E is configured as explicit live-only smoke coverage: callers must set `LIVE_BASE_URL`, and the current suite covers guest navigation/protected diary redirect, guest chat concise-reply UX, guest files page/search UI flows, and mobile guest sidebar navigation.
 - Release notes are static frontend data in `packages/web/src/version.ts`; every user-visible release needs `APP_VERSION`, `RELEASE_NOTES`, the root `package.json`, and both workspace `package.json` versions bumped together.
 - After the user has clearly told the agent to continue, the agent should not pause to ask whether to proceed again within the same execution thread.

@@ -56,6 +56,7 @@
 - [x] 5.8 實作對話資料夾 CRUD
 - [x] 5.9 讓共享選人摘要以實際選中的 agents 為準，避免下游 chat summary 與 selected agents 不一致
 - [x] 5.10 對明確的 concise reply 指令改走 answer-only synthesis，避免被多 agent 格式覆蓋
+- [x] 5.11 對實用推薦/找答案型 chat 補 direct-answer routing，避免 `給我答案` 仍停在陪聊模式
 
 ## 6. Frontend / 前端 UI
 

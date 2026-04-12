@@ -78,6 +78,7 @@ async function runChatAgent(
   memoryStr: string,
   historyStr: string,
   assignedFocus: string,
+  practicalIntent: boolean,
   _apiKey: string, // ignored — withStreamRetry handles key selection
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
@@ -113,6 +114,8 @@ ${agent.systemPrompt}
   let prompt = `使用者的問題（主要回應目標）：${userMessage}`;
   if (isPlanningIntent(userMessage)) {
     prompt += `\n\n【回應要求】這是規劃/安排型需求。請先給具體可執行的下一步、可選方向或待辦拆解，不要只做情緒陪伴或空泛鼓勵。`;
+  } else if (practicalIntent) {
+    prompt += `\n\n【回應要求】這是實用解題/推薦需求。請直接給答案、建議、推薦或明確選項，不要只做情緒陪伴、感受探索或空泛鼓勵。`;
   }
   if (imagePart) prompt += `\n\n【使用者同時上傳了圖片（輔助資訊，不要忽視文字問題）】\n${imagePart}`;
   if (memoryStr) prompt += `\n\n【使用者跨對話記憶（僅供參考）】\n${memoryStr}`;
@@ -294,6 +297,55 @@ async function synthesizePlanningChat(
   return fullText;
 }
 
+async function synthesizePracticalAnswerChat(
+  agentResults: Array<{ agentId: string; result: string }>,
+  userMessage: string,
+  contextStr: string,
+  memoryStr: string,
+  historyStr: string,
+  onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
+  nickname?: string,
+  conciseInstruction?: string,
+): Promise<string> {
+  onEvent({ type: 'synthesizing', message: '🎯 整理直接答案中...' });
+
+  const analysisBlock = agentResults
+    .map((r) => {
+      const agent = AGENTS[r.agentId];
+      return `【${agent.name}】\n${r.result}`;
+    })
+    .join('\n\n');
+
+  let prompt = `使用者現在要的是直接答案或推薦：${userMessage}\n\n`;
+  if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
+  if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
+  if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
+  if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+  prompt += `以下是各位好友提供的解題觀點：\n\n${analysisBlock}`;
+
+  const isConciseReply = Boolean(conciseInstruction);
+  if (isConciseReply) {
+    prompt += `\n\n【輸出要求】${conciseInstruction}`;
+    prompt += `\n請嚴格遵守格式要求，只輸出最終答案本身。`;
+  } else {
+    prompt += `\n\n請先直接回答使用者問題，不要再用多角色格式。若資訊不足，可做合理假設，但第一句就要給出明確答案或建議。之後最多補 2-3 個簡短備選或判斷依據。`;
+  }
+
+  const systemPrompt = isConciseReply
+    ? buildNicknameInstruction(nickname || '') + '你是實用問題的最終回答整理器。請根據使用者問題與多位好友觀點，直接輸出答案本身。規則：繁體中文、嚴格遵守格式要求、不要輸出角色名、emoji 或多段陪聊。'
+    : buildNicknameInstruction(nickname || '') + '你是實用解題助理。你的任務是把多位夥伴的觀點整理成直接、可用、可執行的答案。規則：繁體中文、答案優先、不要多角色格式、不要情緒陪聊蓋過解題。';
+
+  const fullText = await callGeminiText(systemPrompt, prompt, 1800, {
+    maxRetries: 5,
+    callType: 'chat-practical-master',
+    disableThinking: true,
+    timeoutMs: 30000,
+  });
+  onEvent({ type: 'synthesizing', content: fullText });
+  return fullText;
+}
+
 function createClientAbortError(): Error {
   const error = new Error("client-aborted");
   error.name = "ClientAbortError";
@@ -303,6 +355,35 @@ function createClientAbortError(): Error {
 function isPlanningIntent(...inputs: Array<string | undefined>): boolean {
   const combined = inputs.filter(Boolean).join("\n");
   return /旅行|旅遊|行程|規劃|安排|韓國|日本|首爾|釜山|濟州|大阪|東京|京都|福岡|沖繩|出國|自由行|待辦|清單|計畫|沒有頭緒|沒頭緒/i.test(combined);
+}
+
+function extractLastUserMessage(historyStr?: string): string {
+  const lines = String(historyStr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i].startsWith('使用者：')) {
+      return lines[i].slice('使用者：'.length).trim();
+    }
+  }
+
+  return '';
+}
+
+function isPracticalAnswerIntent(
+  currentMessage: string,
+  historyStr?: string,
+): boolean {
+  const current = String(currentMessage || '');
+  const priorUserMessage = extractLastUserMessage(historyStr);
+  const practicalTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|幫我選晚餐|幫我選餐廳|晚點吃什麼/i;
+  const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問/i;
+
+  if (practicalTopic.test(current)) return true;
+  if (answerPush.test(current) && practicalTopic.test(priorUserMessage)) return true;
+  return false;
 }
 
 function extractTravelDestination(userMessage: string): string {
@@ -340,6 +421,18 @@ function getPlanningSelections(content: string) {
       { agent: AGENTS.ajiao, reason: `當使用者說自己沒頭緒時，幫忙把焦慮拆成少量可處理的小步驟。` },
     ],
     summary: `這輪是旅行規劃情境，我優先邀請阿慕、驚驚、阿焦，直接把想法整理成下一步、風險確認與可執行待辦，而不是停在抽象鼓勵。`,
+  };
+}
+
+function getPracticalSelections(content: string) {
+  const target = /晚餐|午餐|早餐|宵夜|餐廳|美食|吃/.test(content) ? '吃飯選擇' : '這個實用問題';
+  return {
+    selections: [
+      { agent: AGENTS.amu, reason: `把 ${target} 直接收斂成可執行的答案或選項。` },
+      { agent: AGENTS.yanyan, reason: `替使用者淘汰普通選項，留下更值得直接採用的推薦。` },
+      { agent: AGENTS.jingjing, reason: `補上踩雷風險、限制條件與快速判斷依據。` },
+    ],
+    summary: `這輪是實用解題情境，我優先邀請阿慕、厭厭、驚驚，直接把問題收斂成答案、推薦與快速判斷依據，而不是停在情緒陪聊。`,
   };
 }
 
@@ -875,6 +968,7 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
       const planningIntent = isPlanningIntent(content, historyStr, sessionMeta?.title);
+      const practicalIntent = !planningIntent && isPracticalAnswerIntent(content, historyStr);
       const conciseInstruction = buildConciseReplyInstruction(content);
 
       const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
@@ -893,8 +987,10 @@ router.post(
 
       const { selections, summary: rawSelectionSummary } = planningIntent
         ? getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+        : practicalIntent
+        ? getPracticalSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
         : await selectAgentsWithAI(selectionInput, 3);
-      const selectionSummary = planningIntent
+      const selectionSummary = planningIntent || practicalIntent
         ? rawSelectionSummary
         : buildIntentSummaryFromSelections(selections);
       ensureClientConnected();
@@ -953,6 +1049,7 @@ router.post(
           memoryStr,
           historyStr,
           reasonsMap[agent.id] || `${agent.name} 補這輪最需要的獨特角度。`,
+          practicalIntent,
           "",
           sendEvent,
           imagePart || undefined,
@@ -986,6 +1083,18 @@ router.post(
       try {
         aiResponse = planningIntent
           ? await synthesizePlanningChat(
+              agentResults,
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+              conciseInstruction || undefined,
+            )
+          : practicalIntent
+          ? await synthesizePracticalAnswerChat(
               agentResults,
               content,
               contextStr,
