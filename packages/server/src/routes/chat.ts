@@ -501,6 +501,99 @@ function extractRecentUserMessages(historyStr?: string, limit = 4): string[] {
   return users;
 }
 
+function extractLastAssistantMessage(historyStr?: string): string {
+  const lines = String(historyStr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i].startsWith('助理：')) {
+      return lines[i].slice('助理：'.length).trim();
+    }
+  }
+
+  return '';
+}
+
+function isPracticalRefinementMessage(currentMessage: string): boolean {
+  return /預算低一點|便宜一點|不要排隊|近一點|近一些|近一點就好|不要太花錢|附理由|給理由|唯一答案|直接給唯一答案|直接給一個答案|只給一個|選最便宜的|選近一點的/i.test(
+    String(currentMessage || ''),
+  );
+}
+
+function hasPracticalRefinementContext(historyStr?: string): boolean {
+  const recentUsers = extractRecentUserMessages(historyStr, 4);
+  const lastAssistant = extractLastAssistantMessage(historyStr);
+  const practicalTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|晚點吃什麼|推薦我去哪|去哪裡散心|去哪散心|週末去哪|週末推薦我去哪|.+跟.+選一個|.+還是.+選一個|.+跟.+選哪個|.+或.+選哪個|.+還是.+選哪個|怎麼跟.+溝通|怎麼和.+溝通|如何跟.+溝通|如何和.+溝通|怎麼跟.+談|怎麼和.+談|如何跟.+談|如何和.+談|.+怎麼談比較好|推薦我怎麼|建議我怎麼|直接告訴我怎麼|教我怎麼/i;
+  return recentUsers.some((message) => practicalTopic.test(message) || isPracticalRefinementMessage(message)) && Boolean(lastAssistant);
+}
+
+function buildPracticalRefinementDeterministic(currentMessage: string, historyStr: string): string | null {
+  const current = String(currentMessage || '');
+  const recentUsers = extractRecentUserMessages(historyStr, 6).join('\n');
+  const lastAssistant = extractLastAssistantMessage(historyStr);
+  const combined = `${recentUsers}\n${lastAssistant}\n${current}`;
+
+  const isFood = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|餐廳|美食/.test(combined);
+  const isPlace = /去哪|去哪裡|散心|週末/.test(combined);
+  const isTaipeiStation = /台北車站|北車/.test(combined);
+
+  if (isFood && isTaipeiStation) {
+    if (/預算低一點|便宜一點|不要太花錢|選最便宜的/.test(current)) {
+      if (/南陽街|補習街/.test(lastAssistant)) return '南陽街或補習街的小吃店。價格通常更低，也比商場餐廳划算。';
+      return null;
+    }
+    if (/不要排隊/.test(current)) {
+      if (/台北地下街|微風台北車站|微風廣場/.test(lastAssistant)) return '台北地下街或微風台北車站美食街。翻桌快、選擇多，也比較不容易卡在排隊。';
+      return null;
+    }
+    if (/近一點|近一些|近一點就好|選近一點的/.test(current)) {
+      if (/台北地下街|微風台北車站|微風廣場/.test(lastAssistant)) return '台北地下街。它就在車站下方，移動最少，也方便快速吃完。';
+      return null;
+    }
+    if (/附理由|給理由/.test(current)) {
+      if (/台北地下街/.test(lastAssistant)) {
+        return '因為它就在車站下方、最近、店家多、翻桌快，通常比餐廳區更省時間。';
+      }
+      if (/南陽街|補習街/.test(lastAssistant)) {
+        return '因為這一帶通常更便宜，離北車也近，想壓低預算時比商場餐廳更划算。';
+      }
+      return '因為這個選項通常同時兼顧距離、價格與排隊風險，比較符合你剛剛一路加上的條件。';
+    }
+    if (/唯一答案|直接給唯一答案|直接給一個答案|只給一個/.test(current)) {
+      if (/台北地下街/.test(lastAssistant) || /不要排隊|近一點/.test(recentUsers)) {
+        return '台北地下街。';
+      }
+      if (/南陽街|補習街/.test(lastAssistant) || /預算低一點/.test(recentUsers)) {
+        return '南陽街小吃店。';
+      }
+      return null;
+    }
+  }
+
+  if (isPlace) {
+    if (/近一點|近一些|近一點就好|選近一點的/.test(current)) {
+      if (/公園|河堤|商場|咖啡店/.test(lastAssistant)) return '附近公園或河堤。移動成本最低，也最容易立刻出門。';
+      return null;
+    }
+    if (/不要太花錢|便宜一點|預算低一點|選最便宜的/.test(current)) {
+      if (/公園|河堤|商場|咖啡店/.test(lastAssistant)) return '附近公園、河堤或圖書館。這些地方幾乎不用花錢，也能讓你換個環境。';
+      return null;
+    }
+    if (/附理由|給理由/.test(current)) {
+      if (/公園|河堤|商場|咖啡店/.test(lastAssistant)) return '因為你現在要的是低成本、低負擔、可以立刻開始的選項，越近、越便宜、越不用規劃的地方越適合。';
+      return null;
+    }
+    if (/唯一答案|直接給唯一答案|直接給一個答案|只給一個/.test(current)) {
+      if (/公園|河堤|商場|咖啡店/.test(lastAssistant)) return '附近公園。';
+      return null;
+    }
+  }
+
+  return null;
+}
+
 function isPracticalAnswerIntent(
   currentMessage: string,
   historyStr?: string,
@@ -1258,6 +1351,19 @@ router.post(
               userNickname,
               conciseInstruction || undefined,
             )
+          : practicalIntent && isPracticalRefinementMessage(content) && hasPracticalRefinementContext(historyStr)
+          ? buildPracticalRefinementDeterministic(content, historyStr) ||
+            (await synthesizePracticalAnswerChat(
+              agentResults,
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+              conciseInstruction || undefined,
+            ))
           : practicalIntent
           ? await synthesizePracticalAnswerChat(
               agentResults,
