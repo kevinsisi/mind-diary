@@ -430,20 +430,46 @@ function extractLastUserMessage(historyStr?: string): string {
   return '';
 }
 
+function extractRecentUserMessages(historyStr?: string, limit = 4): string[] {
+  const lines = String(historyStr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const users: string[] = [];
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (lines[i].startsWith('使用者：')) {
+      users.push(lines[i].slice('使用者：'.length).trim());
+      if (users.length >= limit) break;
+    }
+  }
+
+  return users;
+}
+
 function isPracticalAnswerIntent(
   currentMessage: string,
   historyStr?: string,
 ): boolean {
   const current = String(currentMessage || '');
   const priorUserMessage = extractLastUserMessage(historyStr);
+  const recentUserMessages = extractRecentUserMessages(historyStr, 4);
   const recommendationTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|晚點吃什麼|推薦我去哪|去哪裡散心|去哪散心|週末去哪|週末推薦我去哪/i;
   const choiceTopic = /.+跟.+選一個|.+還是.+選一個|.+跟.+選哪個|.+或.+選哪個|.+還是.+選哪個|幫我選.+|替我選.+/i;
   const howToTopic = /怎麼跟.+溝通|怎麼和.+溝通|如何跟.+溝通|如何和.+溝通|怎麼跟.+談|怎麼和.+談|如何跟.+談|如何和.+談|.+怎麼談比較好|推薦我怎麼|建議我怎麼|直接告訴我怎麼|教我怎麼/i;
   const practicalTopic = new RegExp(`${recommendationTopic.source}|${choiceTopic.source}|${howToTopic.source}`, 'i');
   const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問|直接說結論/i;
+  const refinementPush = /預算低一點|便宜一點|不要排隊|近一點|近一些|近一點就好|不要太花錢|附理由|給理由|唯一答案|直接給唯一答案|只給一個|選最便宜的|選近一點的/i;
+  const emotionalTopic = /焦慮|難過|委屈|失戀|沒胃口|心情很差|很亂|很煩|不知道怎麼辦|被罵|被羞辱|冷落/i;
 
   if (practicalTopic.test(current)) return true;
   if (answerPush.test(current) && practicalTopic.test(priorUserMessage)) return true;
+  if (refinementPush.test(current)) {
+    if (recentUserMessages.some((message) => emotionalTopic.test(message))) return false;
+    if (recentUserMessages.some((message) => practicalTopic.test(message) || answerPush.test(message) || refinementPush.test(message))) {
+      return true;
+    }
+  }
   return false;
 }
 
