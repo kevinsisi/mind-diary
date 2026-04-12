@@ -14,7 +14,7 @@ export default defineConfig({
   projects: [
     {
       name: 'live-ui',
-      testMatch: /live-(guest-navigation|guest-chat|guest-search-files|release-notes)\.spec\.ts/,
+      testMatch: /live-(guest-navigation|guest-chat|guest-search-files|release-notes|practical-boundaries)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         baseURL: process.env.LIVE_BASE_URL || 'http://127.0.0.1:9',
