@@ -42,6 +42,7 @@
 - [x] 4.11 實作日記資料夾 CRUD + 標籤 CRUD API
 - [x] 4.12 實作 AI 自動標籤（日記建立後自動生成）
 - [x] 4.13 補強 diary 背景標題清洗與有效性檢查，避免壞 AI 標題覆蓋 fallback title
+- [x] 4.14 補強 diary 背景標題的重試與 heuristic fallback，避免第一輪 AI 失敗就停在粗略前綴標題
 
 ## 5. AI Agent / 對話系統
 
@@ -54,6 +55,7 @@
 - [x] 5.7 實作 diaryAnalyzer.ts（多 Agent 平行分析 + SSE orchestration）
 - [x] 5.8 實作對話資料夾 CRUD
 - [x] 5.9 讓共享選人摘要以實際選中的 agents 為準，避免下游 chat summary 與 selected agents 不一致
+- [x] 5.10 對明確的 concise reply 指令改走 answer-only synthesis，避免被多 agent 格式覆蓋
 
 ## 6. Frontend / 前端 UI
 

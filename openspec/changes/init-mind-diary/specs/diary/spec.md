@@ -11,6 +11,10 @@ The system SHALL provide full CRUD operations for diary entries. Each entry has 
 - **WHEN** a diary entry is created without a title and the background AI title result is malformed, meta, or too short to be useful
 - **THEN** system keeps the fallback title instead of overwriting it with a bad generated value
 
+#### Scenario: Title generation retries before falling back
+- **WHEN** the first background AI title attempt fails or returns an unusable title
+- **THEN** system retries with stricter title prompts and only falls back to a deterministic heuristic title when no valid AI title can be produced
+
 #### Scenario: Update diary entry
 - **WHEN** user updates an existing diary entry's content
 - **THEN** system updates the entry and sets updated_at to current time

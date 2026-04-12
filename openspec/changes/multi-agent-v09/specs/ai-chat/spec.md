@@ -1,14 +1,9 @@
 ## ADDED Requirements
 
-### Requirement: Multi-agent chat system with 5 persona agents
-The system SHALL respond to chat messages using a multi-agent pipeline: AI selects 2–4 persona agents, each produces a response in parallel, then a master synthesizer merges all responses into a single reply.
+### Requirement: Multi-agent chat system with current persona roster
+The system SHALL respond to chat messages using the current multi-agent pipeline: AI selects 2-4 persona agents from the live roster defined in `packages/server/src/ai/agents.ts`, each produces a response in parallel, then a final synthesizer merges all responses into a single reply.
 
-The five persona agents are:
-- **小魚** (心靈支持者) — emotional support, empathy
-- **阿哲** (務實建議者) — practical advice, logic
-- **小敏** (創意激發者) — creative ideas, lateral thinking
-- **大熊** (知識分享者) — knowledge, research, facts
-- **小藍** (行動規劃者) — action plans, steps, to-do lists
+The live roster currently contains 13 stable persona agents, and the stored agent IDs MUST stay aligned with `agents.ts`.
 
 #### Scenario: Agent selection
 - **WHEN** user sends a chat message
@@ -17,6 +12,10 @@ The five persona agents are:
 #### Scenario: Selection summary matches actual agents
 - **WHEN** agent selection is completed
 - **THEN** the shared selection summary only describes the agents that were actually selected, so downstream chat events and persisted metadata remain consistent with the selected agent list
+
+#### Scenario: Explicit concise reply directive bypasses persona formatting
+- **WHEN** the user explicitly requires a short answer format such as `只回答一句話`, `只回答代號`, or `不要加其他文字`
+- **THEN** final synthesis returns a single answer that follows the requested format, instead of the normal multi-agent persona layout
 
 #### Scenario: Parallel agent execution
 - **WHEN** agents are selected

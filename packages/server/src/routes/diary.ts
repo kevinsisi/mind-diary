@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
 import fs from "node:fs";
 import { sqlite } from "../db/connection.js";
-import { generateReflection, generateText } from "../ai/geminiClient.js";
+import { generateReflection } from "../ai/geminiClient.js";
+import { callGeminiText } from "../ai/geminiRetry.js";
 import { optionalAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -71,6 +72,27 @@ function buildFallbackDiaryTitle(content: string): string {
   return content.slice(0, 20) + (content.length > 20 ? '...' : '');
 }
 
+function buildHeuristicDiaryTitle(content: string): string {
+  const normalized = String(content || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[A-Z_]+\d{4,}/g, ' ')
+    .trim();
+
+  const clauses = normalized
+    .split(/[。！？!?\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) =>
+      part
+        .replace(/^(?:今天|我今天|這是|這篇|想記錄一下|記錄一下|我想記下|我想記錄)\s*/g, '')
+        .trim()
+    )
+    .filter(Boolean);
+
+  const best = clauses.find((part) => part.length >= 4) || clauses[0] || normalized;
+  return best.slice(0, 10).trim();
+}
+
 function normalizeDiaryTitleCandidate(raw: string): string {
   const candidates = String(raw || '')
     .replace(/```(?:\w+)?\s*([\s\S]*?)```/g, '$1')
@@ -98,24 +120,39 @@ function isValidGeneratedDiaryTitle(title: string, fallbackTitle: string): boole
   return true;
 }
 
+async function generateDiaryTitleCandidate(content: string, fallbackTitle: string): Promise<string> {
+  const prompts = [
+    '你是日記標題助手。請根據使用者提供的日記內容，只輸出一個簡短的繁體中文標題。規則：10字以內、不加引號、不加前綴、不解釋、不換行。',
+    '你是日記標題助手。請把這段日記濃縮成一個自然、具體、可直接當標題的繁體中文短標題。規則：4到10字、不加引號、不加「標題：」、不換行、只回標題本身。',
+  ];
+
+  for (const systemPrompt of prompts) {
+    try {
+      const raw = await callGeminiText(systemPrompt, content.slice(0, 1200), 32, {
+        maxRetries: 2,
+        callType: 'diary-title',
+        disableThinking: true,
+        timeoutMs: 8000,
+      });
+      const normalized = normalizeDiaryTitleCandidate(raw).slice(0, 20);
+      if (isValidGeneratedDiaryTitle(normalized, fallbackTitle)) {
+        return normalized;
+      }
+    } catch (err) {
+      console.warn('[diary-title] Title prompt attempt failed:', (err as Error).message);
+    }
+  }
+
+  return buildHeuristicDiaryTitle(content);
+}
+
 function updateDiaryTitleInBackground(entryId: number, content: string): void {
   const fallbackTitle = buildFallbackDiaryTitle(content);
   void (async () => {
     try {
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('diary title timeout')), 8000)
-      );
-      const generated = await Promise.race([
-        generateText(content, {
-          systemPrompt:
-            '你是日記標題助手。請根據使用者提供的日記內容，只輸出一個簡短的繁體中文標題。規則：10字以內、不加引號、不加前綴、不解釋、不換行。',
-          maxTokens: 32,
-        }),
-        timeout,
-      ]);
-      const cleanTitle = normalizeDiaryTitleCandidate(generated.text).slice(0, 20);
+      const cleanTitle = await generateDiaryTitleCandidate(content, fallbackTitle);
       if (!isValidGeneratedDiaryTitle(cleanTitle, fallbackTitle)) {
-        console.warn('[diary-title] Ignored invalid generated title:', generated.text);
+        console.warn('[diary-title] Unable to produce a better title, keeping fallback:', cleanTitle);
         return;
       }
 

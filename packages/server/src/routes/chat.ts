@@ -202,6 +202,7 @@ async function synthesizeChat(
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
   nickname?: string,
+  conciseInstruction?: string,
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧠 整合回覆中..." });
 
@@ -228,9 +229,20 @@ async function synthesizeChat(
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
   prompt += `以下是各位好友的觀點：\n\n${analysisBlock}`;
-      prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題，且彼此不要重複相同建議。`;
 
-  const fullText = await callGeminiText(buildNicknameInstruction(nickname || '') + MASTER_CHAT_PROMPT, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
+  const isConciseReply = Boolean(conciseInstruction);
+  if (isConciseReply) {
+    prompt += `\n\n【輸出要求】${conciseInstruction}`;
+    prompt += `\n請整合成一個最終答案，嚴格遵守格式要求。不要輸出 emoji、角色名、前言、解釋或多段回覆。`;
+  } else {
+    prompt += `\n\n請以這些好友的身份回覆（${agentFormatHint}），每位 1-3 句話，確保回應使用者的文字問題，且彼此不要重複相同建議。`;
+  }
+
+  const systemPrompt = isConciseReply
+    ? buildNicknameInstruction(nickname || '') + '你是心靈日記的最終回答整理器。請根據使用者問題與多位好友的觀點，輸出單一最終答案。規則：繁體中文、嚴格遵守使用者格式要求、只輸出答案本身。'
+    : buildNicknameInstruction(nickname || '') + MASTER_CHAT_PROMPT;
+
+  const fullText = await callGeminiText(systemPrompt, prompt, 4096, { maxRetries: 5, callType: "chat-master", disableThinking: true, timeoutMs: 30000 });
   onEvent({ type: "synthesizing", content: fullText });
   return fullText;
 }
@@ -244,6 +256,7 @@ async function synthesizePlanningChat(
   onEvent: (event: Record<string, any>) => void,
   imagePart?: string,
   nickname?: string,
+  conciseInstruction?: string,
 ): Promise<string> {
   onEvent({ type: "synthesizing", message: "🧭 整理規劃中..." });
 
@@ -261,7 +274,17 @@ async function synthesizePlanningChat(
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
   prompt += `以下是各位好友的規劃觀點：\n\n${analysisBlock}`;
 
-  const fullText = await callGeminiText(buildNicknameInstruction(nickname || '') + PLANNING_CHAT_PROMPT, prompt, 2200, {
+  const isConciseReply = Boolean(conciseInstruction);
+  if (isConciseReply) {
+    prompt += `\n\n【輸出要求】${conciseInstruction}`;
+    prompt += `\n請整合成單一最終答案，嚴格遵守格式要求。不要輸出 checklist、角色名、emoji 或額外解釋。`;
+  }
+
+  const systemPrompt = isConciseReply
+    ? buildNicknameInstruction(nickname || '') + '你是規劃需求的最終回答整理器。請根據使用者需求與多位好友觀點，輸出一個最終答案。規則：繁體中文、嚴格遵守使用者格式要求、只輸出答案本身。'
+    : buildNicknameInstruction(nickname || '') + PLANNING_CHAT_PROMPT;
+
+  const fullText = await callGeminiText(systemPrompt, prompt, 2200, {
     maxRetries: 5,
     callType: "chat-planning-master",
     disableThinking: true,
@@ -328,6 +351,109 @@ function buildIntentSummaryFromSelections(
   return `這輪我邀請了${selections.map((s) => s.agent.name).join('、')}，分別從不同角度補上不重複的回應：${selections
     .map((s) => `${s.agent.name}負責${s.reason || s.agent.role}`)
     .join('；')}`;
+}
+
+function buildConciseReplyInstruction(userMessage: string): string | null {
+  const text = String(userMessage || '');
+  const rules: string[] = [];
+  const hasFollowupStructure = /(先|先用).*一句|一句.*(?:再|然後|之後)/.test(text);
+  const asksForDirectAnswer = /(?:請|麻煩|幫我|直接|務必)*(?:用|以)?(?:一句話|一句)(?:直接)?(?:回答|回覆|講|說|輸出)|(?:請|麻煩|幫我|直接|務必)*(?:直接)?(?:回答|回覆|講|說|輸出).*?(?:用|以)?(?:一句話|一句)|\b(?:only answer|one sentence)\b/i.test(text);
+  const asksForAnswerOnly = /(?:請|麻煩|幫我|直接)?(?:只回答|只回|只輸出)/.test(text);
+
+  if (hasFollowupStructure && asksForDirectAnswer) {
+    return '先用一句話直接回答，再依使用者要求補上必要內容；不要使用多角色格式。';
+  }
+
+  if (/只回答.*本身|只回.*本身|only answer/i.test(text)) {
+    rules.push('只輸出答案本身。');
+  } else if (asksForAnswerOnly) {
+    rules.push('不要加額外說明。');
+  }
+
+  if (!hasFollowupStructure && asksForDirectAnswer) {
+    rules.push('整體只用一句話。');
+  }
+
+  if (/(?:回答|回覆|輸出).*(?:不要加其他文字|不要其他文字|不要解釋|不要補充|不要前言)|(?:不要加其他文字|不要其他文字|不要解釋|不要補充|不要前言).*(?:回答|回覆|輸出)/i.test(text)) {
+    rules.push('不要加任何額外文字、角色名、emoji、條列或解釋。');
+  }
+
+  if (/只回答代號|只回答答案|只回答名稱|只回代號|只回答案|只回名稱/.test(text)) {
+    rules.push('如果答案是代號、名稱或短詞，只輸出該字串本身。');
+  }
+
+  return rules.length > 0 ? rules.join(' ') : null;
+}
+
+function extractStrictShortAnswer(text: string): string {
+  const cleaned = String(text || '').trim();
+
+  const leadingToken = cleaned.match(/^([A-Za-z0-9_-]{2,})(?:[，,。.!?\s]|$)/);
+  if (leadingToken?.[1]) return leadingToken[1].trim();
+
+  const named = cleaned.match(/(?:答案是|答案為|名稱是|代號是|代號|名稱)\s*([A-Za-z0-9_\-\u4e00-\u9fff]+)/);
+  if (named?.[1]) return named[1].trim();
+
+  const quoted = cleaned.match(/[「『"]([^」』"]+)[」』"]/);
+  if (quoted?.[1]) return quoted[1].trim();
+
+  const token = cleaned.match(/[A-Za-z0-9_-]{2,}/g)?.[0];
+  if (token) return token;
+
+  return '';
+}
+
+function sanitizeConciseFallbackAnswer(text: string, conciseInstruction: string): string {
+  let cleaned = String(text || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^[^\s]+\s+[^\s：:]+[：:]\s*/, '').replace(/^[-*]\s*/, '').trim())
+    .find(Boolean) || '';
+
+  if (/代號|名稱|本身/.test(conciseInstruction)) {
+    const strict = extractStrictShortAnswer(cleaned);
+    if (strict) return strict;
+
+    const firstClause = cleaned
+      .replace(/^(?:答案是|名稱是|代號是|我會選|我選|選擇|選|就是|是)\s*/g, '')
+      .split(/[，。,；;！？!?]/)[0]
+      ?.trim();
+    if (firstClause) return firstClause;
+  }
+
+  if (/一句話|一句/.test(conciseInstruction)) {
+    cleaned = cleaned.split(/[。！？!?]/)[0]?.trim() || cleaned;
+    cleaned = cleaned.replace(/[，,；;].*$/, '').trim();
+    if (cleaned && !/[。！？!?]$/.test(cleaned) && !/代號|名稱|本身/.test(conciseInstruction)) {
+      cleaned += '。';
+    }
+  }
+
+  if (/只輸出答案本身|不要加額外說明/.test(conciseInstruction)) {
+    cleaned = cleaned.replace(/[，,；;].*$/, '').trim();
+  }
+
+  return cleaned;
+}
+
+function buildConciseFallbackResponse(
+  agentResults: Array<{ agentId: string; result: string }>,
+  conciseInstruction: string,
+): string {
+  if (/代號|名稱|本身/.test(conciseInstruction)) {
+    for (const result of agentResults) {
+      const strict = extractStrictShortAnswer(result.result);
+      if (strict) return strict;
+    }
+  }
+
+  for (const result of agentResults) {
+    const candidate = sanitizeConciseFallbackAnswer(result.result, conciseInstruction);
+    if (candidate) return candidate;
+  }
+
+  return '（暫時無法回應）';
 }
 
 function getOwnedChatFolder(folderId: unknown, userId: number) {
@@ -749,6 +875,7 @@ router.post(
         .map((m) => `${m.role === "user" ? "使用者" : "助手"}：${m.content}`)
         .join("\n");
       const planningIntent = isPlanningIntent(content, historyStr, sessionMeta?.title);
+      const conciseInstruction = buildConciseReplyInstruction(content);
 
       const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
 
@@ -867,6 +994,7 @@ router.post(
               sendEvent,
               imagePart || undefined,
               userNickname,
+              conciseInstruction || undefined,
             )
           : await synthesizeChat(
               agentResults,
@@ -877,14 +1005,17 @@ router.post(
               sendEvent,
               imagePart || undefined,
               userNickname,
+              conciseInstruction || undefined,
             );
       } catch (synthesisErr: any) {
         console.error("[chat] Synthesis failed, using fallback:", synthesisErr);
-        aiResponse = buildFallbackChatResponse(agentResults);
+        aiResponse = conciseInstruction
+          ? buildConciseFallbackResponse(agentResults, conciseInstruction)
+          : buildFallbackChatResponse(agentResults);
         sendEvent({ type: "synthesizing", content: aiResponse });
       }
 
-      if (planningIntent && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
+      if (planningIntent && !conciseInstruction && !/^- \[(?: |x|X)\]/m.test(aiResponse)) {
         aiResponse = `${aiResponse.trim()}\n${buildPlanningStarter(content)}`;
       }
 

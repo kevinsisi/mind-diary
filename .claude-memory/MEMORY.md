@@ -51,6 +51,7 @@ Master agent (整合者) synthesizes 2–3 selected agents per message.
 - Legacy `users` profile columns (`nickname`, `custom_instructions`) are backfilled once during server startup, not lazily during auth requests.
 - Diary background title generation must keep the fallback title if Gemini returns a malformed/meta title such as a single token or label-like output.
 - Shared multi-agent selection summaries must be derived from the actual selected agents so persisted summaries stay consistent with the selected agent list.
+- Explicit concise reply directives in chat (for example `只回答一句`, `只回答代號`, `不要加其他文字`) should switch final synthesis into answer-only mode instead of forcing the normal multi-agent formatted reply.
 
 ## Toolchain (added 2026-04-07)
 
