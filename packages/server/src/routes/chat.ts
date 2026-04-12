@@ -378,8 +378,11 @@ function isPracticalAnswerIntent(
 ): boolean {
   const current = String(currentMessage || '');
   const priorUserMessage = extractLastUserMessage(historyStr);
-  const practicalTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|幫我選晚餐|幫我選餐廳|晚點吃什麼/i;
-  const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問/i;
+  const recommendationTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|晚點吃什麼/i;
+  const choiceTopic = /.+跟.+選一個|.+還是.+選一個|幫我選.+|替我選.+/i;
+  const howToTopic = /怎麼跟.+溝通|怎麼和.+溝通|如何跟.+溝通|如何和.+溝通|推薦我怎麼|建議我怎麼|直接告訴我怎麼|教我怎麼/i;
+  const practicalTopic = new RegExp(`${recommendationTopic.source}|${choiceTopic.source}|${howToTopic.source}`, 'i');
+  const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問|直接說結論/i;
 
   if (practicalTopic.test(current)) return true;
   if (answerPush.test(current) && practicalTopic.test(priorUserMessage)) return true;

@@ -21,6 +21,10 @@ The live roster currently contains 13 stable persona agents, and the stored agen
 - **WHEN** the user asks a practical utility question such as what to eat, which option to choose, or explicitly says `給我答案`
 - **THEN** the system prioritizes direct-answer synthesis over reflective persona chat, and the follow-up turn can override earlier exploratory behavior
 
+#### Scenario: Practical how-to and comparison queries prefer direct answer mode
+- **WHEN** the user asks for actionable advice such as how to communicate with someone, or gives a direct comparison request such as `A 跟 B 選一個`
+- **THEN** the system prioritizes a direct answer or recommendation instead of reflective persona chat
+
 #### Scenario: Parallel agent execution
 - **WHEN** agents are selected
 - **THEN** system runs all agents concurrently via `Promise.all()`; each agent receives the user message, RAG context, and recent conversation history
