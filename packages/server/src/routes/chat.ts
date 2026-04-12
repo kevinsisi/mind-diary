@@ -330,12 +330,17 @@ async function synthesizePracticalAnswerChat(
     prompt += `\n\n【輸出要求】${conciseInstruction}`;
     prompt += `\n請嚴格遵守格式要求，只輸出最終答案本身。`;
   } else {
-    prompt += `\n\n請先直接回答使用者問題，不要再用多角色格式。若資訊不足，可做合理假設，但第一句就要給出明確答案或建議。之後最多補 2-3 個簡短備選或判斷依據。`;
+    prompt += `\n\n請先直接回答使用者問題，不要再用多角色格式。`
+      + ` 第一行必須先給出一個明確主推薦或結論。`
+      + ` 若是吃飯/地點問題，優先給具體類型、區域或店家方向，不要只說「找最近的」這種空話。`
+      + ` 若是 how-to 問題，直接給可執行步驟，不要先做情緒探索。`
+      + ` 若是二選一問題，第一句就明確選其中一個。`
+      + ` 之後最多補 2-3 個簡短理由、備選或判斷依據。`;
   }
 
   const systemPrompt = isConciseReply
     ? buildNicknameInstruction(nickname || '') + '你是實用問題的最終回答整理器。請根據使用者問題與多位好友觀點，直接輸出答案本身。規則：繁體中文、嚴格遵守格式要求、不要輸出角色名、emoji 或多段陪聊。'
-    : buildNicknameInstruction(nickname || '') + '你是實用解題助理。你的任務是把多位夥伴的觀點整理成直接、可用、可執行的答案。規則：繁體中文、答案優先、不要多角色格式、不要情緒陪聊蓋過解題。';
+    : buildNicknameInstruction(nickname || '') + '你是實用解題助理。你的任務是直接給出可用、可執行、具體的答案。規則：繁體中文、答案優先、第一句就給主結論、不要多角色格式、不要情緒陪聊蓋過解題、不要用空泛套話。';
 
   const fullText = await callGeminiText(systemPrompt, prompt, 1800, {
     maxRetries: 5,
@@ -391,8 +396,10 @@ function allAgentResultsUnavailable(agentResults: Array<{ agentId: string; resul
 
 function buildPracticalEmergencyResponse(userMessage: string): string {
   const text = String(userMessage || '');
-  if (/火鍋|拉麵/.test(text)) return '直接選火鍋。';
-  if (/早餐|晚餐|午餐|宵夜|吃什麼|吃甚麼|吃啥/.test(text)) return '先選一間評價穩定、離你最近的店，直接去吃，不要再耗在選擇上。';
+  if (/火鍋|拉麵/.test(text)) return '直接選火鍋。它通常更有飽足感、選擇也比較多。';
+  if (/早餐/.test(text)) return '早餐先選蛋餅加豆漿或飯糰這種穩定不踩雷的組合。';
+  if (/午餐|晚餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食/.test(text)) return '先選一間離你最近、評價穩定、你平常就會吃的店，不要再耗在選擇上。';
+  if (/去哪|去哪裡|散心|週末/.test(text)) return '先去一個移動成本低、能立刻出發的地方，例如附近公園、河堤、商場或咖啡店，重點是先出門。';
   if (/主管|溝通|談/.test(text)) return '先整理你的目標、事實和希望主管回應的具體內容，再約一個不被打擾的時間直接談。';
   return '先直接選一個最可行的方案執行，再視結果微調。';
 }
@@ -429,7 +436,7 @@ function isPracticalAnswerIntent(
 ): boolean {
   const current = String(currentMessage || '');
   const priorUserMessage = extractLastUserMessage(historyStr);
-  const recommendationTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|晚點吃什麼/i;
+  const recommendationTopic = /晚餐|午餐|早餐|宵夜|吃什麼|吃甚麼|吃啥|餐廳|美食|哪家|哪裡吃|吃哪間|吃哪家|晚點吃什麼|推薦我去哪|去哪裡散心|去哪散心|週末去哪|週末推薦我去哪/i;
   const choiceTopic = /.+跟.+選一個|.+還是.+選一個|.+跟.+選哪個|.+或.+選哪個|.+還是.+選哪個|幫我選.+|替我選.+/i;
   const howToTopic = /怎麼跟.+溝通|怎麼和.+溝通|如何跟.+溝通|如何和.+溝通|怎麼跟.+談|怎麼和.+談|如何跟.+談|如何和.+談|.+怎麼談比較好|推薦我怎麼|建議我怎麼|直接告訴我怎麼|教我怎麼/i;
   const practicalTopic = new RegExp(`${recommendationTopic.source}|${choiceTopic.source}|${howToTopic.source}`, 'i');
