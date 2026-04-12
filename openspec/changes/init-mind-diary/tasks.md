@@ -58,6 +58,7 @@
 - [x] 5.10 對明確的 concise reply 指令改走 answer-only synthesis，避免被多 agent 格式覆蓋
 - [x] 5.11 對實用推薦/找答案型 chat 補 direct-answer routing，避免 `給我答案` 仍停在陪聊模式
 - [x] 5.12 擴充 practical-answer routing 到 how-to 建議與二選一比較問題，避免 `推薦我怎麼...` / `選一個` 仍停在陪聊模式
+- [x] 5.13 補 practical wording variants（如 `選哪個`、`怎麼和...談比較好`），並保留 generic emotional `怎麼辦` 在 reflective path
 
 ## 6. Frontend / 前端 UI
 

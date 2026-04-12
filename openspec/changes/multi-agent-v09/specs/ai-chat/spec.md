@@ -25,6 +25,10 @@ The live roster currently contains 13 stable persona agents, and the stored agen
 - **WHEN** the user asks for actionable advice such as how to communicate with someone, or gives a direct comparison request such as `A 跟 B 選一個`
 - **THEN** the system prioritizes a direct answer or recommendation instead of reflective persona chat
 
+#### Scenario: Practical wording variants still route directly
+- **WHEN** the user uses equivalent practical wording such as `A 或 B 選哪個`, `A 跟 B 選哪個`, or `怎麼和主管談比較好`
+- **THEN** the system still treats the turn as a practical direct-answer request, while avoiding generic emotional `怎麼辦` overmatching
+
 #### Scenario: Parallel agent execution
 - **WHEN** agents are selected
 - **THEN** system runs all agents concurrently via `Promise.all()`; each agent receives the user message, RAG context, and recent conversation history
