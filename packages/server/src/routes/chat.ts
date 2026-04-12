@@ -390,6 +390,46 @@ async function synthesizePracticalFallbackDirect(
   return fullText;
 }
 
+async function synthesizeDirectiveAdviceDirect(
+  userMessage: string,
+  contextStr: string,
+  memoryStr: string,
+  historyStr: string,
+  onEvent: (event: Record<string, any>) => void,
+  imagePart?: string,
+  nickname?: string,
+): Promise<string> {
+  onEvent({ type: 'synthesizing', message: '🧭 直接整理建議中...' });
+
+  const recent = `${historyStr}\n${userMessage}`;
+  const hasConcreteTopic = /主管|工作|感情|前任|失戀|焦慮|壓力|睡不著|晚餐|午餐|早餐|宵夜|吃|餐廳|去哪|散心|朋友|家庭|家人|同事|職涯|學習|選哪個|選一個/i.test(recent);
+  if (!hasConcreteTopic) {
+    const clarification = '可以，直接告訴我你現在要處理的主題，例如工作、人際、感情、吃飯或行程，我就直接給建議。';
+    onEvent({ type: 'synthesizing', content: clarification });
+    return clarification;
+  }
+
+  let prompt = `使用者明確要求直接建議：${userMessage}\n\n`;
+  if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
+  if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
+  if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
+  if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+  prompt += '請直接給 2-4 條可執行建議或一個最優先的下一步。不要安慰、不要角色格式、不要追問、不要情緒探索蓋過解題。';
+
+  const systemPrompt =
+    buildNicknameInstruction(nickname || '') +
+    '你是直接建議助手。當使用者明確要求不要安慰、直接給答案或直接給建議時，你必須直接提供可執行建議。規則：繁體中文、答案優先、不要角色名、不要 emoji、不要情緒陪聊。';
+
+  const fullText = await callGeminiText(systemPrompt, prompt, 1200, {
+    maxRetries: 3,
+    callType: 'chat-direct-advice',
+    disableThinking: true,
+    timeoutMs: 20000,
+  });
+  onEvent({ type: 'synthesizing', content: fullText });
+  return fullText;
+}
+
 function allAgentResultsUnavailable(agentResults: Array<{ agentId: string; result: string }>): boolean {
   return agentResults.every((result) => String(result.result || '').includes('（暫時無法回應）'));
 }
@@ -402,6 +442,17 @@ function buildPracticalEmergencyResponse(userMessage: string): string {
   if (/去哪|去哪裡|散心|週末/.test(text)) return '先去一個移動成本低、能立刻出發的地方，例如附近公園、河堤、商場或咖啡店，重點是先出門。';
   if (/主管|溝通|談/.test(text)) return '先整理你的目標、事實和希望主管回應的具體內容，再約一個不被打擾的時間直接談。';
   return '先直接選一個最可行的方案執行，再視結果微調。';
+}
+
+function buildDirectiveEmergencyResponse(historyStr: string): string {
+  const recent = String(historyStr || '');
+  if (/焦慮|很煩|壓力|睡不著/.test(recent)) {
+    return '先做三件事：一，喝水並離開讓你更緊繃的環境五分鐘；二，把現在最焦慮的三件事寫下來；三，只挑一件今天能處理的先做。';
+  }
+  if (/失戀|分手|前任|難過|委屈/.test(recent)) {
+    return '先做一件最小的照顧行動：洗澡、吃點東西、出門走十分鐘；今天先不要逼自己想通全部。';
+  }
+  return '先列出你現在最卡的三件事，只挑一件能在今天完成的開始做。';
 }
 
 function createClientAbortError(): Error {
@@ -458,8 +509,8 @@ function isPracticalAnswerIntent(
   const choiceTopic = /.+跟.+選一個|.+還是.+選一個|.+跟.+選哪個|.+或.+選哪個|.+還是.+選哪個|幫我選.+|替我選.+/i;
   const howToTopic = /怎麼跟.+溝通|怎麼和.+溝通|如何跟.+溝通|如何和.+溝通|怎麼跟.+談|怎麼和.+談|如何跟.+談|如何和.+談|.+怎麼談比較好|推薦我怎麼|建議我怎麼|直接告訴我怎麼|教我怎麼/i;
   const practicalTopic = new RegExp(`${recommendationTopic.source}|${choiceTopic.source}|${howToTopic.source}`, 'i');
-  const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問|直接說結論/i;
-  const refinementPush = /預算低一點|便宜一點|不要排隊|近一點|近一些|近一點就好|不要太花錢|附理由|給理由|唯一答案|直接給唯一答案|只給一個|選最便宜的|選近一點的/i;
+  const answerPush = /給我答案|直接告訴我|直接回答|幫我選|替我選|選一個|就直接說|不要再問|直接說結論|直接給一個答案/i;
+  const refinementPush = /預算低一點|便宜一點|不要排隊|近一點|近一些|近一點就好|不要太花錢|附理由|給理由|唯一答案|直接給唯一答案|直接給一個答案|只給一個|選最便宜的|選近一點的/i;
   const emotionalTopic = /焦慮|難過|委屈|失戀|沒胃口|心情很差|很亂|很煩|不知道怎麼辦|被罵|被羞辱|冷落/i;
 
   if (practicalTopic.test(current)) return true;
@@ -470,6 +521,18 @@ function isPracticalAnswerIntent(
       return true;
     }
   }
+  return false;
+}
+
+function isDirectiveAdviceIntent(currentMessage: string, historyStr?: string): boolean {
+  const current = String(currentMessage || '');
+  const recent = extractRecentUserMessages(historyStr, 3).join('\n');
+  const directAdvice = /不要安慰我|直接給建議|給我建議|直接給答案|直接給方法|直接說怎麼做|不要陪聊/i;
+  const genericAnswerPush = /給我答案|直接回答|就直接說/i;
+  const emotionalContext = /焦慮|難過|委屈|失戀|前任|很亂|很累|壓力|睡不著|沒用|低落|心情差/i;
+
+  if (directAdvice.test(current)) return true;
+  if (genericAnswerPush.test(current) && emotionalContext.test(recent) && !isPracticalAnswerIntent(current, historyStr)) return true;
   return false;
 }
 
@@ -1056,6 +1119,7 @@ router.post(
         .join("\n");
       const planningIntent = isPlanningIntent(content, historyStr, sessionMeta?.title);
       const practicalIntent = !planningIntent && isPracticalAnswerIntent(content, historyStr);
+      const directiveAdviceIntent = !planningIntent && !practicalIntent && isDirectiveAdviceIntent(content, historyStr);
       const conciseInstruction = buildConciseReplyInstruction(content);
 
       const memoryStr = req.userId ? formatUserMemories(req.userId) : "";
@@ -1076,8 +1140,10 @@ router.post(
         ? getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
         : practicalIntent
         ? getPracticalSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+        : directiveAdviceIntent
+        ? { selections: [], summary: '這輪使用者明確要求直接建議，因此改走直接建議模式，不使用多角色陪聊格式。'}
         : await selectAgentsWithAI(selectionInput, 3);
-      const selectionSummary = planningIntent || practicalIntent
+      const selectionSummary = planningIntent || practicalIntent || directiveAdviceIntent
         ? rawSelectionSummary
         : buildIntentSummaryFromSelections(selections);
       ensureClientConnected();
@@ -1088,7 +1154,7 @@ router.post(
         reasonsMap[s.agent.id] = s.reason;
       }
 
-      const intentAgents = practicalIntent
+      const intentAgents = practicalIntent || directiveAdviceIntent
         ? []
         : selections.map((s) => ({
             id: s.agent.id,
@@ -1101,7 +1167,7 @@ router.post(
       sendEvent({
         type: "intent",
         agents: intentAgents,
-        reasons: practicalIntent ? {} : reasonsMap,
+        reasons: practicalIntent || directiveAdviceIntent ? {} : reasonsMap,
         summary: selectionSummary,
       });
 
@@ -1109,15 +1175,15 @@ router.post(
         .map((s) => s.agent)
         .filter((agent, index, agents) => agents.findIndex((candidate) => candidate.id === agent.id) === index);
       const intentResult = {
-        agents: practicalIntent ? [] : selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
+        agents: practicalIntent || directiveAdviceIntent ? [] : selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
         summary: selectionSummary,
       };
 
       sendEvent({
         type: "phase",
         phase: "thinking",
-        message: practicalIntent ? '直接整理可用答案' : `派出 ${selectedAgents.length} 位好友討論`,
-        agents: practicalIntent
+        message: practicalIntent || directiveAdviceIntent ? '直接整理可用答案' : `派出 ${selectedAgents.length} 位好友討論`,
+        agents: practicalIntent || directiveAdviceIntent
           ? []
           : selectedAgents.map((a) => ({
               id: a.id,
@@ -1135,7 +1201,7 @@ router.post(
       // 5. Run agents in parallel for reflective/planning chats only.
       // Practical-answer mode should prioritize a stable direct answer instead of depending on all agent calls.
       ensureClientConnected();
-      const agentResults = practicalIntent
+      const agentResults = practicalIntent || directiveAdviceIntent
         ? []
         : await Promise.all(
             selectedAgents.map((agent) => {
@@ -1201,6 +1267,16 @@ router.post(
               userNickname,
               conciseInstruction || undefined,
             )
+          : directiveAdviceIntent
+          ? await synthesizeDirectiveAdviceDirect(
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+            )
           : await synthesizeChat(
               agentResults,
               content,
@@ -1231,6 +1307,22 @@ router.post(
             aiResponse = conciseInstruction
               ? buildPracticalEmergencyResponse(content)
               : buildPracticalEmergencyResponse(content);
+            sendEvent({ type: 'synthesizing', content: aiResponse });
+          }
+        } else if (directiveAdviceIntent) {
+          try {
+            aiResponse = await synthesizeDirectiveAdviceDirect(
+              content,
+              contextStr,
+              memoryStr,
+              historyStr,
+              sendEvent,
+              imagePart || undefined,
+              userNickname,
+            );
+          } catch (directiveErr) {
+            console.error('[chat] Directive advice fallback failed:', directiveErr);
+            aiResponse = buildDirectiveEmergencyResponse(historyStr);
             sendEvent({ type: 'synthesizing', content: aiResponse });
           }
         } else {
