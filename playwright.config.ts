@@ -14,9 +14,17 @@ export default defineConfig({
   projects: [
     {
       name: 'live-ui',
-      testIgnore: /local-auth-diary\.spec\.ts/,
+      testMatch: /live-(guest-navigation|guest-chat|guest-search-files)\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
+        baseURL: process.env.LIVE_BASE_URL || 'http://127.0.0.1:9',
+      },
+    },
+    {
+      name: 'live-mobile',
+      testMatch: /live-mobile-navigation\.spec\.ts/,
+      use: {
+        ...devices['Pixel 7'],
         baseURL: process.env.LIVE_BASE_URL || 'http://127.0.0.1:9',
       },
     },

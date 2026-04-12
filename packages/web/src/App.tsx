@@ -245,6 +245,7 @@ export default function App() {
                 <button
                   className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400"
                   onClick={() => setSidebarOpen(true)}
+                  aria-label="開啟側欄"
                 >
                   <Menu size={22} />
                 </button>
