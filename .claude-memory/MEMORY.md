@@ -20,15 +20,15 @@ Master agent (整合者) synthesizes 2–3 selected agents per message.
 
 ## Key Files
 
-| File | Purpose |
-|---|---|
-| `packages/server/src/ai/agents.ts` | Agent persona definitions |
-| `packages/server/src/ai/diaryAnalyzer.ts` | Agent selection + synthesis |
-| `packages/server/src/ai/geminiClient.ts` | Gemini API wrapper |
-| `packages/server/src/ai/pool.ts` | API key pool (rotation, cooldown) |
-| `packages/server/src/routes/chat.ts` | Chat endpoints + SSE streaming |
-| `packages/server/src/db/schema.ts` | Drizzle schema (all tables) |
-| `packages/web/src/pages/Chat.tsx` | Main chat UI with SSE rendering |
+| File                                      | Purpose                           |
+| ----------------------------------------- | --------------------------------- |
+| `packages/server/src/ai/agents.ts`        | Agent persona definitions         |
+| `packages/server/src/ai/diaryAnalyzer.ts` | Agent selection + synthesis       |
+| `packages/server/src/ai/geminiClient.ts`  | Gemini API wrapper                |
+| `packages/server/src/ai/pool.ts`          | API key pool (rotation, cooldown) |
+| `packages/server/src/routes/chat.ts`      | Chat endpoints + SSE streaming    |
+| `packages/server/src/db/schema.ts`        | Drizzle schema (all tables)       |
+| `packages/web/src/pages/Chat.tsx`         | Main chat UI with SSE rendering   |
 
 ## Deployment
 
@@ -42,7 +42,13 @@ Master agent (整合者) synthesizes 2–3 selected agents per message.
 - Do not rename agent IDs (referenced in stored messages)
 - Do not change port 8823
 - Do not break SSE protocol (`data: <token>` / `data: [DONE]`)
-- Schema changes need Drizzle migration
+- New schema changes should use Drizzle migrations; the auth profile columns (`nickname`, `custom_instructions`) are a legacy startup backfill exception for older databases.
+
+## Product Behavior Notes
+
+- Guest mode uses public-space data with `user_id = 0` for chat, files, search, and diary APIs; the `/diary` page itself remains login-gated in the frontend.
+- Admin user deletion must reject removing the last remaining admin account; backend must enforce this even if the UI already expects the error state.
+- Legacy `users` profile columns (`nickname`, `custom_instructions`) are backfilled once during server startup, not lazily during auth requests.
 
 ## Toolchain (added 2026-04-07)
 

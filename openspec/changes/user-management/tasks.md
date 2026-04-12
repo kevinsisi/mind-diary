@@ -17,13 +17,13 @@
 - [x] 2.4 建立 `packages/server/src/routes/auth.ts`：`POST /api/auth/login`（bcryptjs 驗證，設 httpOnly cookie）
 - [x] 2.5 新增 `POST /api/auth/logout`（清除 cookie）
 - [x] 2.6 新增 `GET /api/auth/me`（回傳當前使用者資訊）
-- [x] 2.7 新增 `PATCH /api/auth/password`（使用者修改自己密碼，需舊密碼驗證）
-- [x] 2.8 建立 `packages/server/src/routes/users.ts`：Admin CRUD（GET/POST/DELETE /api/users, PATCH /api/users/:id/password）
-- [x] 2.9 在 `packages/server/src/index.ts` 掛載 `cookie-parser`，註冊 auth 和 users 路由
+- [x] 2.7 新增 `PATCH /api/auth/me`（使用者修改自己的暱稱與自訂指令）
+- [x] 2.8 在 `packages/server/src/routes/auth.ts` 提供 Admin CRUD（GET/POST/PATCH/DELETE `/api/auth/users`）
+- [x] 2.9 在 `packages/server/src/index.ts` 掛載 `cookie-parser`，註冊 auth 路由
 
 ## 3. 後端資料隔離（現有路由加 user_id filter）
 
-- [x] 3.1 修改 `packages/server/src/routes/diary.ts`：所有查詢加 `user_id = req.userId` filter，改用 `requireAuth`
+- [x] 3.1 修改 `packages/server/src/routes/diary.ts`：所有查詢加 `user_id = req.userId` filter，並讓 guest 走 `user_id = 0` 公共空間
 - [x] 3.2 修改 `packages/server/src/routes/files.ts`：所有查詢加 `user_id = req.userId` filter，改用 `optionalAuth`（訪客可用）
 - [x] 3.3 修改 `packages/server/src/routes/chat.ts`：sessions 查詢加 `user_id = req.userId` filter，改用 `optionalAuth`
 - [x] 3.4 修改 `packages/server/src/routes/search.ts`：FTS5 結果 JOIN 主表後加 `user_id = req.userId` filter
@@ -33,6 +33,7 @@
 ## 4. 初始化：自動建立 Admin 帳號
 
 - [x] 4.1 在 `packages/server/src/index.ts` 啟動時檢查 users 表是否為空，若空則讀取 `ADMIN_USERNAME`/`ADMIN_PASSWORD` env 建立 admin（id=1），並 log 警告若使用預設密碼
+- [x] 4.2 在 `packages/server/src/index.ts` 啟動時補齊 legacy `users` 表的 profile 欄位（`nickname`、`custom_instructions`），避免 request path 才做 schema backfill
 
 ## 5. 前端：AuthContext 與路由保護
 
@@ -71,9 +72,11 @@
 
 - [ ] 10.1 本機測試：登入/登出流程、JWT cookie 驗證、admin 管理功能
 - [ ] 10.2 本機測試：訪客模式資料隔離（guest vs 登入使用者）
-- [ ] 10.3 本機測試：日記 API 拒絕訪客請求（401）
+- [ ] 10.3 本機測試：日記 API 在訪客模式下只操作 `user_id = 0` 的公共資料
 - [ ] 10.4 RPi 部署前備份 DB：`cp /data/mind-diary.db /data/mind-diary.db.backup`
 - [ ] 10.5 部署新版 Docker image 到 RPi，確認 migration 自動執行
 - [ ] 10.6 驗收：使用 admin 帳號登入，確認現有資料可正常存取
 - [ ] 10.7 驗收：新增第二個使用者帳號，確認資料完全隔離
 - [ ] 10.8 bump version：`version.ts` + 3 個 `package.json`（root, server, web）→ commit → push
+- [x] 10.9 補上 backend 的最後一個 admin 不可刪保護，避免只靠前端預期訊息
+- [x] 10.10 明確記錄 guest diary API 使用公共空間（user_id=0），避免與登入後的日記頁面限制混淆
