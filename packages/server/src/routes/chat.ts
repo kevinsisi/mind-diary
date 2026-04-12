@@ -309,12 +309,14 @@ async function synthesizePracticalAnswerChat(
   conciseInstruction?: string,
 ): Promise<string> {
   onEvent({ type: 'synthesizing', message: '🎯 整理直接答案中...' });
+  const lastAssistant = extractLastAssistantMessage(historyStr);
 
   let prompt = `使用者現在要的是直接答案或推薦：${userMessage}\n\n`;
   if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
   if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
+  if (lastAssistant) prompt += `【上一輪已提出的候選答案】\n${lastAssistant}\n\n`;
   if (agentResults.length > 0) {
     const analysisBlock = agentResults
       .map((r) => {
@@ -332,6 +334,7 @@ async function synthesizePracticalAnswerChat(
   } else {
     prompt += `\n\n請先直接回答使用者問題，不要再用多角色格式。`
       + ` 第一行必須先給出一個明確主推薦或結論。`
+      + ` 如果使用者是在 refinement 先前答案（例如預算、距離、排隊、附理由、唯一答案），就必須在上一輪候選答案中收斂，不要重置成泛用建議。`
       + ` 若是吃飯/地點問題，優先給具體類型、區域或店家方向，不要只說「找最近的」這種空話。`
       + ` 若是 how-to 問題，直接給可執行步驟，不要先做情緒探索。`
       + ` 若是二選一問題，第一句就明確選其中一個。`
