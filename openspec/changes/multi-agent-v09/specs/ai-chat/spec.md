@@ -29,6 +29,18 @@ The live roster currently contains 13 stable persona agents, and the stored agen
 - **WHEN** the user uses equivalent practical wording such as `A 或 B 選哪個`, `A 跟 B 選哪個`, or `怎麼和主管談比較好`
 - **THEN** the system still treats the turn as a practical direct-answer request, while avoiding generic emotional `怎麼辦` overmatching
 
+#### Scenario: Practical mode should not collapse into empty persona responses
+- **WHEN** the user asks a practical recommendation, comparison, or actionable how-to question
+- **THEN** the system should prioritize a stable direct answer path and must not degrade into persona-formatted `（暫時無法回應）` shells
+
+#### Scenario: Practical refinements stay on the same answer track
+- **WHEN** the user follows a practical answer with refinement turns such as `預算低一點`, `不要排隊`, `近一點`, `附理由`, or `直接給唯一答案`
+- **THEN** the system should refine the previous practical answer instead of switching back to reflective multi-agent chat
+
+#### Scenario: Direct-advice mode for explicit anti-comfort requests
+- **WHEN** the user explicitly says `不要安慰我` or requests a direct answer after an emotional disclosure
+- **THEN** the system should respond with direct advice or next steps instead of emotional support; if the topic is still too vague, it should ask the user to specify the topic directly
+
 #### Scenario: Parallel agent execution
 - **WHEN** agents are selected
 - **THEN** system runs all agents concurrently via `Promise.all()`; each agent receives the user message, RAG context, and recent conversation history

@@ -59,6 +59,9 @@
 - [x] 5.11 對實用推薦/找答案型 chat 補 direct-answer routing，避免 `給我答案` 仍停在陪聊模式
 - [x] 5.12 擴充 practical-answer routing 到 how-to 建議與二選一比較問題，避免 `推薦我怎麼...` / `選一個` 仍停在陪聊模式
 - [x] 5.13 補 practical wording variants（如 `選哪個`、`怎麼和...談比較好`），並保留 generic emotional `怎麼辦` 在 reflective path
+- [x] 5.14 practical 模式改走穩定 direct-answer path，避免 practical 問題退化成 `（暫時無法回應）`
+- [x] 5.15 practical refinement follow-up（預算/距離/排隊/理由/唯一答案）需延續上一輪 practical answer，而不是掉回 reflective
+- [x] 5.16 新增 generalized direct-advice mode，處理 `不要安慰我` 與情緒脈絡下的 `給我答案`
 
 ## 6. Frontend / 前端 UI
 
