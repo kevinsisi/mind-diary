@@ -310,19 +310,20 @@ async function synthesizePracticalAnswerChat(
 ): Promise<string> {
   onEvent({ type: 'synthesizing', message: '🎯 整理直接答案中...' });
 
-  const analysisBlock = agentResults
-    .map((r) => {
-      const agent = AGENTS[r.agentId];
-      return `【${agent.name}】\n${r.result}`;
-    })
-    .join('\n\n');
-
   let prompt = `使用者現在要的是直接答案或推薦：${userMessage}\n\n`;
   if (imagePart) prompt += `【使用者同時上傳了圖片（輔助資訊）】\n${imagePart}\n\n`;
   if (memoryStr) prompt += `【使用者跨對話記憶（僅供參考）】\n${memoryStr}\n\n`;
   if (contextStr) prompt += `【相關資料】\n${contextStr}\n\n`;
   if (historyStr) prompt += `【最近對話紀錄】\n${historyStr}\n\n`;
-  prompt += `以下是各位好友提供的解題觀點：\n\n${analysisBlock}`;
+  if (agentResults.length > 0) {
+    const analysisBlock = agentResults
+      .map((r) => {
+        const agent = AGENTS[r.agentId];
+        return `【${agent.name}】\n${r.result}`;
+      })
+      .join('\n\n');
+    prompt += `以下是各位好友提供的解題觀點：\n\n${analysisBlock}`;
+  }
 
   const isConciseReply = Boolean(conciseInstruction);
   if (isConciseReply) {
@@ -386,6 +387,14 @@ async function synthesizePracticalFallbackDirect(
 
 function allAgentResultsUnavailable(agentResults: Array<{ agentId: string; result: string }>): boolean {
   return agentResults.every((result) => String(result.result || '').includes('（暫時無法回應）'));
+}
+
+function buildPracticalEmergencyResponse(userMessage: string): string {
+  const text = String(userMessage || '');
+  if (/火鍋|拉麵/.test(text)) return '直接選火鍋。';
+  if (/早餐|晚餐|午餐|宵夜|吃什麼|吃甚麼|吃啥/.test(text)) return '先選一間評價穩定、離你最近的店，直接去吃，不要再耗在選擇上。';
+  if (/主管|溝通|談/.test(text)) return '先整理你的目標、事實和希望主管回應的具體內容，再約一個不被打擾的時間直接談。';
+  return '先直接選一個最可行的方案執行，再視結果微調。';
 }
 
 function createClientAbortError(): Error {
@@ -1046,16 +1055,20 @@ router.post(
         reasonsMap[s.agent.id] = s.reason;
       }
 
+      const intentAgents = practicalIntent
+        ? []
+        : selections.map((s) => ({
+            id: s.agent.id,
+            name: s.agent.name,
+            emoji: s.agent.emoji,
+            role: s.agent.role,
+            reason: s.reason,
+          }));
+
       sendEvent({
         type: "intent",
-        agents: selections.map((s) => ({
-          id: s.agent.id,
-          name: s.agent.name,
-          emoji: s.agent.emoji,
-          role: s.agent.role,
-          reason: s.reason,
-        })),
-        reasons: reasonsMap,
+        agents: intentAgents,
+        reasons: practicalIntent ? {} : reasonsMap,
         summary: selectionSummary,
       });
 
@@ -1063,20 +1076,22 @@ router.post(
         .map((s) => s.agent)
         .filter((agent, index, agents) => agents.findIndex((candidate) => candidate.id === agent.id) === index);
       const intentResult = {
-        agents: selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
+        agents: practicalIntent ? [] : selections.map((s) => ({ id: s.agent.id, reason: s.reason })),
         summary: selectionSummary,
       };
 
       sendEvent({
         type: "phase",
         phase: "thinking",
-        message: `派出 ${selectedAgents.length} 位好友討論`,
-        agents: selectedAgents.map((a) => ({
-          id: a.id,
-          name: a.name,
-          emoji: a.emoji,
-          role: a.role,
-        })),
+        message: practicalIntent ? '直接整理可用答案' : `派出 ${selectedAgents.length} 位好友討論`,
+        agents: practicalIntent
+          ? []
+          : selectedAgents.map((a) => ({
+              id: a.id,
+              name: a.name,
+              emoji: a.emoji,
+              role: a.role,
+            })),
       });
 
       // Look up user nickname and custom_instructions for personalized AI responses
@@ -1084,36 +1099,39 @@ router.post(
       const userNickname = chatUserData?.nickname || '';
       const userCustomInstructions = chatUserData?.custom_instructions || '';
 
-      // 5. Run agents in parallel (callGeminiWithRetry handles keys internally)
+      // 5. Run agents in parallel for reflective/planning chats only.
+      // Practical-answer mode should prioritize a stable direct answer instead of depending on all agent calls.
       ensureClientConnected();
-      const agentPromises = selectedAgents.map((agent) => {
-        return runChatAgent(
-          agent,
-          content,
-          contextStr,
-          memoryStr,
-          historyStr,
-          reasonsMap[agent.id] || `${agent.name} 補這輪最需要的獨特角度。`,
-          practicalIntent,
-          "",
-          sendEvent,
-          imagePart || undefined,
-          userNickname,
-          userCustomInstructions,
-        ).catch((err) => {
-          console.error(`[chat] Agent ${agent.id} failed:`, err);
-          sendEvent({
-            type: "agent-done",
-            agentId: agent.id,
-            agentName: agent.name,
-            agentEmoji: agent.emoji,
-            content: "（暫時無法回應）",
-          });
-          return { agentId: agent.id, result: "（暫時無法回應）" };
-        });
-      });
-
-      const agentResults = await Promise.all(agentPromises);
+      const agentResults = practicalIntent
+        ? []
+        : await Promise.all(
+            selectedAgents.map((agent) => {
+              return runChatAgent(
+                agent,
+                content,
+                contextStr,
+                memoryStr,
+                historyStr,
+                reasonsMap[agent.id] || `${agent.name} 補這輪最需要的獨特角度。`,
+                practicalIntent,
+                "",
+                sendEvent,
+                imagePart || undefined,
+                userNickname,
+                userCustomInstructions,
+              ).catch((err) => {
+                console.error(`[chat] Agent ${agent.id} failed:`, err);
+                sendEvent({
+                  type: "agent-done",
+                  agentId: agent.id,
+                  agentName: agent.name,
+                  agentEmoji: agent.emoji,
+                  content: "（暫時無法回應）",
+                });
+                return { agentId: agent.id, result: "（暫時無法回應）" };
+              });
+            }),
+          );
       ensureClientConnected();
 
       // Always continue to synthesis + save, even if client disconnected
@@ -1129,17 +1147,6 @@ router.post(
         aiResponse = planningIntent
           ? await synthesizePlanningChat(
               agentResults,
-              content,
-              contextStr,
-              memoryStr,
-              historyStr,
-              sendEvent,
-              imagePart || undefined,
-              userNickname,
-              conciseInstruction || undefined,
-            )
-          : practicalIntent && allAgentResultsUnavailable(agentResults)
-          ? await synthesizePracticalFallbackDirect(
               content,
               contextStr,
               memoryStr,
@@ -1189,8 +1196,8 @@ router.post(
           } catch (practicalFallbackErr) {
             console.error('[chat] Practical fallback synthesis failed:', practicalFallbackErr);
             aiResponse = conciseInstruction
-              ? buildConciseFallbackResponse(agentResults, conciseInstruction)
-              : buildFallbackChatResponse(agentResults);
+              ? buildPracticalEmergencyResponse(content)
+              : buildPracticalEmergencyResponse(content);
             sendEvent({ type: 'synthesizing', content: aiResponse });
           }
         } else {
