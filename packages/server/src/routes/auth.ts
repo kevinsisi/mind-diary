@@ -113,6 +113,32 @@ router.patch('/me', (req: Request, res: Response) => {
   res.json(updated);
 });
 
+// POST /api/auth/reset-password — admin resets any user's password by username
+router.post('/reset-password', requireAdmin, (req: Request, res: Response) => {
+  const { username, newPassword } = req.body as {
+    username?: string;
+    newPassword?: string;
+  };
+  if (!username || !newPassword) {
+    res.status(400).json({ error: '需要帳號和新密碼' });
+    return;
+  }
+  if (newPassword.length < 4) {
+    res.status(400).json({ error: '新密碼長度至少 4 個字元' });
+    return;
+  }
+  const user = sqlite.prepare('SELECT id FROM users WHERE username = ?').get(username) as
+    | { id: number }
+    | undefined;
+  if (!user) {
+    res.status(404).json({ error: '使用者不存在' });
+    return;
+  }
+  const hash = bcrypt.hashSync(newPassword, 10);
+  sqlite.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, user.id);
+  res.json({ ok: true, id: user.id, username });
+});
+
 // ── Admin: user CRUD ───────────────────────────────────────────────
 
 // GET /api/auth/users

@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BookOpen, Loader2 } from 'lucide-react';
+import { BookOpen, Loader2, KeyRound, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useSiteConfig } from '../context/SiteConfigContext';
 
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -88,6 +89,15 @@ export default function LoginPage() {
             {loading && <Loader2 size={16} className="animate-spin" />}
             {loading ? '登入中…' : '登入'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setShowForgot(true)}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+          >
+            <KeyRound size={12} />
+            忘記密碼？
+          </button>
         </form>
 
         <button
@@ -97,6 +107,37 @@ export default function LoginPage() {
           以訪客模式瀏覽 →
         </button>
       </div>
+
+      {showForgot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm border border-gray-200 dark:border-gray-700">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <h3 className="font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                <KeyRound size={16} className="text-indigo-500" />
+                忘記密碼
+              </h3>
+              <button
+                onClick={() => setShowForgot(false)}
+                className="p-1 rounded text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-5 py-5 space-y-3 text-sm text-gray-600 dark:text-gray-300">
+              <p>本系統為內部工具，未提供 email 自助重設機制。</p>
+              <p>請聯絡您的管理員協助重設密碼。管理員可在「使用者管理」頁面為您重設密碼。</p>
+            </div>
+            <div className="px-5 py-4 border-t border-gray-100 dark:border-gray-800 flex justify-end">
+              <button
+                onClick={() => setShowForgot(false)}
+                className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 text-sm font-medium transition-colors"
+              >
+                我知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

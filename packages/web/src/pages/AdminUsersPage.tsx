@@ -84,12 +84,16 @@ export default function AdminUsersPage() {
     setError('');
     setResetting(true);
     try {
-      await apiClient.patch(`/api/auth/users/${resetTarget.id}`, { password: resetPassword });
+      await apiClient.post('/api/auth/reset-password', {
+        username: resetTarget.username,
+        newPassword: resetPassword,
+      });
       setResetTarget(null);
       setResetPassword('');
       notify('密碼已重設');
-    } catch {
-      setError('重設密碼失敗');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '';
+      setError(msg.includes('長度') ? '新密碼長度至少 4 個字元' : '重設密碼失敗');
     } finally {
       setResetting(false);
     }

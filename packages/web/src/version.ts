@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.6';
+export const APP_VERSION = '0.18.7';
 
 export interface ReleaseNote {
   version: string;
@@ -7,6 +7,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '0.18.7',
+    title: '加入忘記密碼流程',
+    highlights: [
+      '登入頁加入「忘記密碼？」按鈕，點擊後會提示請聯絡管理員協助重設。',
+      '管理員可在「使用者管理」頁面為任何使用者直接重設密碼。',
+    ],
+  },
   {
     version: '0.18.6',
     title: '更新日誌與體驗修正已同步',
