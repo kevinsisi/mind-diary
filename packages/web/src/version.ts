@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.9';
+export const APP_VERSION = '0.18.10';
 
 export interface ReleaseNote {
   version: string;
@@ -7,6 +7,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '0.18.10',
+    title: '對話會先用 AI 判斷你真正需要什麼',
+    highlights: [
+      '聊天流程改成先由 AI 讀取目前訊息、對話標題與最近歷史，再決定要規劃、直接解題、行動支持或陪伴反思。',
+      '規劃、實用問題與情緒困境不再先被硬關鍵字帶路；關鍵字規則只保留在 AI 意圖分析失敗時降級使用。',
+    ],
+  },
   {
     version: '0.18.9',
     title: '情緒低潮時更會幫你處理問題',

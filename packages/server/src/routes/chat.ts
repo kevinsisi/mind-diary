@@ -7,6 +7,9 @@ import { AGENTS, AgentPersona } from '../ai/agents.js';
 import { callGeminiText } from '../ai/geminiRetry.js';
 import { analyzeImage } from '../ai/geminiClient.js';
 import { selectAgentsWithAI } from '../ai/diaryAnalyzer.js';
+import type { AgentSelection } from '../ai/diaryAnalyzer.js';
+import { analyzeChatIntentWithAI } from '../ai/chatIntentAnalyzer.js';
+import type { ChatIntentAnalysis, ChatResponseMode } from '../ai/chatIntentAnalyzer.js';
 import { IMAGES_DIR } from './diaryImages.js';
 import { optionalAuth, requireAuth } from '../middleware/auth.js';
 import { extractAndStoreUserMemories, formatUserMemories } from '../services/userMemory.js';
@@ -616,11 +619,56 @@ function isSupportActionIntent(
       combined,
     );
   const problem =
-    /遇到|碰到|發生|出事|出了|被|主管|同事|朋友|家人|伴侶|男友|女友|前任|工作|公司|學校|考試|作業|報告|面試|客戶|錢|租屋|房東|事故|生病|睡不著|失戀|分手|吵架|衝突|溝通|選擇|決定|處理|解決|幫我|給建議|建議|方法|不知道怎麼辦|怎麼辦|救命/i.test(
+    /遇到|碰到|發生|出事|出了|被|主管|同事|朋友|家人|伴侶|男友|女友|前任|工作|公司|學校|考試|作業|報告|面試|客戶|錢|租屋|房東|事故|生病|睡不著|失戀|分手|吵架|衝突|溝通|選擇|決定|處理|解決|幫我|給建議|建議|方法/i.test(
       combined,
     );
 
   return distress && problem;
+}
+
+function getDeterministicResponseMode(
+  currentMessage: string,
+  historyStr?: string,
+  sessionTitle?: string,
+): ChatResponseMode {
+  if (isPlanningIntent(currentMessage, historyStr, sessionTitle)) return 'planning';
+  if (isPracticalAnswerIntent(currentMessage, historyStr)) return 'practical';
+  if (isDirectiveAdviceIntent(currentMessage, historyStr)) return 'directive_advice';
+  if (isSupportActionIntent(currentMessage, historyStr, sessionTitle)) return 'support_action';
+  return 'reflective';
+}
+
+function getSelectionsFromChatIntent(analysis: ChatIntentAnalysis | null): AgentSelection[] {
+  if (!analysis) return [];
+  const selections: AgentSelection[] = [];
+  const seen = new Set<string>();
+  for (const item of analysis.selected) {
+    const agent = AGENTS[item.id];
+    if (!agent || seen.has(agent.id)) continue;
+    seen.add(agent.id);
+    selections.push({ agent, reason: item.reason || `${agent.name} 補這輪最需要的角度。` });
+  }
+  return selections;
+}
+
+function getChatIntentSummary(
+  responseMode: ChatResponseMode,
+  analysis: ChatIntentAnalysis | null,
+): string {
+  if (analysis?.summary) return analysis.summary;
+
+  const fallbackNote = analysis
+    ? ''
+    : 'AI 意圖分析暫時不可用，改用保守的 deterministic fallback 判斷：';
+  if (responseMode === 'planning')
+    return `${fallbackNote}這輪需要規劃型回覆，優先整理可執行待辦與下一步。`;
+  if (responseMode === 'practical')
+    return `${fallbackNote}這輪需要直接答案，避免多角色陪聊蓋過結論。`;
+  if (responseMode === 'directive_advice')
+    return `${fallbackNote}使用者明確要求直接建議，因此改走直接建議模式。`;
+  if (responseMode === 'support_action')
+    return `${fallbackNote}這輪是情緒困境加問題處理，先穩住情緒，再拆出可執行下一步。`;
+  return `${fallbackNote}這輪適合多夥伴反思式陪伴，先理解情緒與需求。`;
 }
 
 function extractLastUserMessage(historyStr?: string): string {
@@ -854,18 +902,6 @@ function getPlanningSelections(content: string) {
       { agent: AGENTS.ajiao, reason: `當使用者說自己沒頭緒時，幫忙把焦慮拆成少量可處理的小步驟。` },
     ],
     summary: `這輪是旅行規劃情境，我優先邀請阿慕、驚驚、阿焦，直接把想法整理成下一步、風險確認與可執行待辦，而不是停在抽象鼓勵。`,
-  };
-}
-
-function getPracticalSelections(content: string) {
-  const target = /晚餐|午餐|早餐|宵夜|餐廳|美食|吃/.test(content) ? '吃飯選擇' : '這個實用問題';
-  return {
-    selections: [
-      { agent: AGENTS.amu, reason: `把 ${target} 直接收斂成可執行的答案或選項。` },
-      { agent: AGENTS.yanyan, reason: `替使用者淘汰普通選項，留下更值得直接採用的推薦。` },
-      { agent: AGENTS.jingjing, reason: `補上踩雷風險、限制條件與快速判斷依據。` },
-    ],
-    summary: `這輪是實用解題情境，我優先邀請阿慕、厭厭、驚驚，直接把問題收斂成答案、推薦與快速判斷依據，而不是停在情緒陪聊。`,
   };
 }
 
@@ -1464,22 +1500,32 @@ router.post(
         .slice(0, -1) // exclude the just-inserted user message (it's the prompt)
         .map((m) => `${m.role === 'user' ? '使用者' : '助手'}：${m.content}`)
         .join('\n');
-      const planningIntent = isPlanningIntent(content, historyStr, sessionMeta?.title);
-      const practicalIntent = !planningIntent && isPracticalAnswerIntent(content, historyStr);
-      const directiveAdviceIntent =
-        !planningIntent && !practicalIntent && isDirectiveAdviceIntent(content, historyStr);
-      const supportActionIntent =
-        !planningIntent &&
-        !practicalIntent &&
-        !directiveAdviceIntent &&
-        isSupportActionIntent(content, historyStr, sessionMeta?.title);
       const conciseInstruction = buildConciseReplyInstruction(content);
-
       const memoryStr = req.userId ? formatUserMemories(req.userId) : '';
 
-      // 4. AI-based agent selection with reasoning
+      // 4. AI-first turn analysis + agent selection with reasoning
       ensureClientConnected();
-      sendEvent({ type: 'phase', phase: 'analyzing', message: 'AI 分析訊息，選擇最適合的好友...' });
+      sendEvent({ type: 'phase', phase: 'analyzing', message: 'AI 先分析意圖、脈絡與回覆模式...' });
+
+      const chatIntentAnalysis = await analyzeChatIntentWithAI({
+        currentMessage: content,
+        historyStr,
+        sessionTitle: sessionMeta?.title,
+        memoryStr,
+        contextStr,
+        imagePart: imagePart || undefined,
+        availableAgents: Object.values(AGENTS),
+      });
+      const analyzedMode =
+        chatIntentAnalysis && chatIntentAnalysis.safetyConcern !== 'none'
+          ? 'support_action'
+          : chatIntentAnalysis?.responseMode;
+      const responseMode =
+        analyzedMode || getDeterministicResponseMode(content, historyStr, sessionMeta?.title);
+      const planningIntent = responseMode === 'planning';
+      const practicalIntent = responseMode === 'practical';
+      const directiveAdviceIntent = responseMode === 'directive_advice';
+      const supportActionIntent = responseMode === 'support_action';
 
       // Build agent selection input — text question is primary intent, image is auxiliary
       let selectionInput = `使用者的問題（主要意圖）：${content}`;
@@ -1489,23 +1535,30 @@ router.post(
       if (memoryStr) selectionInput += `\n\n使用者跨對話記憶（僅供參考）：\n${memoryStr}`;
       if (contextStr) selectionInput += `\n\n相關背景資料：\n${contextStr}`;
 
+      const aiIntentSelections = getSelectionsFromChatIntent(chatIntentAnalysis);
+      const aiIntentSelectionResult =
+        aiIntentSelections.length > 0
+          ? {
+              selections: aiIntentSelections,
+              summary: getChatIntentSummary(responseMode, chatIntentAnalysis),
+            }
+          : null;
+
       const { selections, summary: rawSelectionSummary } = planningIntent
-        ? getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+        ? aiIntentSelectionResult ||
+          getPlanningSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
         : practicalIntent
-          ? getPracticalSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+          ? { selections: [], summary: getChatIntentSummary(responseMode, chatIntentAnalysis) }
           : supportActionIntent
-            ? getSupportActionSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
+            ? aiIntentSelectionResult ||
+              getSupportActionSelections(`${sessionMeta?.title || ''}\n${historyStr}\n${content}`)
             : directiveAdviceIntent
               ? {
                   selections: [],
-                  summary:
-                    '這輪使用者明確要求直接建議，因此改走直接建議模式，不使用多角色陪聊格式。',
+                  summary: getChatIntentSummary(responseMode, chatIntentAnalysis),
                 }
-              : await selectAgentsWithAI(selectionInput, 3);
-      const selectionSummary =
-        planningIntent || practicalIntent || supportActionIntent || directiveAdviceIntent
-          ? rawSelectionSummary
-          : buildIntentSummaryFromSelections(selections);
+              : aiIntentSelectionResult || (await selectAgentsWithAI(selectionInput, 3));
+      const selectionSummary = rawSelectionSummary || buildIntentSummaryFromSelections(selections);
       ensureClientConnected();
 
       // Build intent data from AI selections
