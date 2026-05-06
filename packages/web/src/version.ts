@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.8';
+export const APP_VERSION = '0.18.9';
 
 export interface ReleaseNote {
   version: string;
@@ -8,7 +8,7 @@ export interface ReleaseNote {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: '0.18.8',
+    version: '0.18.9',
     title: '情緒低潮時更會幫你處理問題',
     highlights: [
       '當你心情很糟又遇到問題時，對話會先穩住情緒，再整理可執行的下一步。',

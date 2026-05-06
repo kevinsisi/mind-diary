@@ -1,6 +1,6 @@
 {
   "name": "@mind-diary/server",
-  "version": "0.18.8",
+  "version": "0.18.9",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
-    "@kevinsisi/ai-core": "github:kevinsisi/ai-core",
+    "@kevinsisi/ai-core": "git+https://github.com/kevinsisi/ai-core.git#36d27c4062c5706173335ac433f287a6eddaff0d",
     "@types/bcryptjs": "^3.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/jsonwebtoken": "^9.0.10",
