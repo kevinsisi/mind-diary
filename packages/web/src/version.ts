@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.10';
+export const APP_VERSION = '0.18.11';
 
 export interface ReleaseNote {
   version: string;
@@ -7,6 +7,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '0.18.11',
+    title: '更容易追蹤 AI 為什麼這樣回',
+    highlights: [
+      '每輪對話會把 AI 判斷出的回覆模式、信心與判斷依據寫入對話派發摘要，方便排查錯誤路由。',
+      '新增 live smoke 測試覆蓋 practical、reflective、support-action 邊界，避免情緒與問題處理再退回亂判。',
+    ],
+  },
   {
     version: '0.18.10',
     title: '對話會先用 AI 判斷你真正需要什麼',

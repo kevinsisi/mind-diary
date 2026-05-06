@@ -671,6 +671,21 @@ function getChatIntentSummary(
   return `${fallbackNote}這輪適合多夥伴反思式陪伴，先理解情緒與需求。`;
 }
 
+function buildChatIntentDispatchReason(params: {
+  responseMode: ChatResponseMode;
+  analysis: ChatIntentAnalysis | null;
+  summary: string;
+}): string {
+  const { responseMode, analysis, summary } = params;
+  const source = analysis ? 'AI 判斷' : 'fallback 判斷';
+  const confidence = analysis ? `，信心 ${analysis.confidence.toFixed(2)}` : '';
+  const safety =
+    analysis && analysis.safetyConcern !== 'none' ? `，安全提醒 ${analysis.safetyConcern}` : '';
+  const reason = analysis?.reason ? ` 判斷依據：${analysis.reason}` : '';
+
+  return `回覆模式：${responseMode}（${source}${confidence}${safety}）。${summary}${reason}`;
+}
+
 function extractLastUserMessage(historyStr?: string): string {
   const lines = String(historyStr || '')
     .split(/\r?\n/)
@@ -1558,7 +1573,11 @@ router.post(
                   summary: getChatIntentSummary(responseMode, chatIntentAnalysis),
                 }
               : aiIntentSelectionResult || (await selectAgentsWithAI(selectionInput, 3));
-      const selectionSummary = rawSelectionSummary || buildIntentSummaryFromSelections(selections);
+      const selectionSummary = buildChatIntentDispatchReason({
+        responseMode,
+        analysis: chatIntentAnalysis,
+        summary: rawSelectionSummary || buildIntentSummaryFromSelections(selections),
+      });
       ensureClientConnected();
 
       // Build intent data from AI selections

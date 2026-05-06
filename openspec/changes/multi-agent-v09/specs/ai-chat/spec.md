@@ -22,6 +22,11 @@ The live roster currently contains 13 stable persona agents, and the stored agen
 - **WHEN** AI chat-turn analysis fails or returns an invalid mode
 - **THEN** system may use deterministic fallback routing, but it must not be the primary decision path for normal chat turns
 
+#### Scenario: Response-mode decision is persisted for diagnosis
+
+- **WHEN** the assistant message is saved
+- **THEN** `dispatch_reason` includes the chosen response mode, whether the mode came from AI or fallback, confidence when available, safety concern when present, and the analyzer's short rationale
+
 #### Scenario: Selection summary matches actual agents
 
 - **WHEN** agent selection is completed
