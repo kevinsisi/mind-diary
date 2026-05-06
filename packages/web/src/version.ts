@@ -1,4 +1,4 @@
-export const APP_VERSION = '0.18.7';
+export const APP_VERSION = '0.18.8';
 
 export interface ReleaseNote {
   version: string;
@@ -7,6 +7,14 @@ export interface ReleaseNote {
 }
 
 export const RELEASE_NOTES: ReleaseNote[] = [
+  {
+    version: '0.18.8',
+    title: '情緒低潮時更會幫你處理問題',
+    highlights: [
+      '當你心情很糟又遇到問題時，對話會先穩住情緒，再整理可執行的下一步。',
+      '回覆會減少空泛安慰，改成問題拆解、低負擔待辦與可直接照著說的句子。',
+    ],
+  },
   {
     version: '0.18.7',
     title: '加入忘記密碼流程',
@@ -28,30 +36,22 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: '0.18.0',
     title: '加入版本更新提示',
-    highlights: [
-      '升級後第一次開啟，會看到「在你不在的時候，我們加入了這些功能」更新摘要。',
-    ],
+    highlights: ['升級後第一次開啟，會看到「在你不在的時候，我們加入了這些功能」更新摘要。'],
   },
   {
     version: '0.17.1',
     title: '送出中的對話現在可以取消',
-    highlights: [
-      '送出中的對話可直接取消，圖片分析與後續流程會停止並清理半途資料。',
-    ],
+    highlights: ['送出中的對話可直接取消，圖片分析與後續流程會停止並清理半途資料。'],
   },
   {
     version: '0.17.0',
     title: '搜尋變得更完整',
-    highlights: [
-      '搜尋現在可找到對話內容、檔案內容，以及日記照片的 AI 描述。',
-    ],
+    highlights: ['搜尋現在可找到對話內容、檔案內容，以及日記照片的 AI 描述。'],
   },
   {
     version: '0.16.0',
     title: '加入資料隔離修復工具',
-    highlights: [
-      '管理員可在設定頁掃描並安全修復 legacy folder ownership 問題。',
-    ],
+    highlights: ['管理員可在設定頁掃描並安全修復 legacy folder ownership 問題。'],
   },
   {
     version: '0.15.2',
@@ -64,9 +64,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: '0.15.0',
     title: '跨對話記憶現在可管理',
-    highlights: [
-      '每位使用者都有跨對話記憶，並可在設定頁查看與刪除。',
-    ],
+    highlights: ['每位使用者都有跨對話記憶，並可在設定頁查看與刪除。'],
   },
 ];
 
